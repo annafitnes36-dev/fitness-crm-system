@@ -14,30 +14,55 @@ interface ScheduleProps {
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
   const { state, addScheduleEntry, enrollClient, markVisit } = store;
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
-  const [form, setForm] = useState({ trainingTypeId: '', trainerId: '', time: '09:00', maxCapacity: 15 });
+  const [addForDate, setAddForDate] = useState('');
+  const [form, setForm] = useState({ trainingTypeId: '', trainerId: '', time: '09:00', maxCapacity: 15, hallId: '' });
   const [enrollSearch, setEnrollSearch] = useState('');
   const [openClientId, setOpenClientId] = useState<string | null>(null);
 
-  const branchEntries = state.schedule.filter(e => e.branchId === state.currentBranchId && e.date === selectedDate);
-  const selectedEntry = selectedEntryId ? state.schedule.find(e => e.id === selectedEntryId) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
 
-  const getDates = () => {
-    const dates = [];
-    for (let i = -1; i <= 6; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      dates.push(d.toISOString().split('T')[0]);
+  const getWeekDays = () => {
+    const days: string[] = [];
+    const monday = new Date(today);
+    const dow = today.getDay();
+    const diff = (dow === 0 ? -6 : 1 - dow) + weekOffset * 7;
+    monday.setDate(today.getDate() + diff);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      days.push(d.toISOString().split('T')[0]);
     }
-    return dates;
+    return days;
   };
 
-  const formatDate = (dateStr: string) => {
+  const weekDays = getWeekDays();
+
+  const formatDayHeader = (dateStr: string) => {
     const d = new Date(dateStr + 'T12:00:00');
-    return { day: d.toLocaleDateString('ru-RU', { weekday: 'short' }), date: d.getDate() };
+    return {
+      weekday: d.toLocaleDateString('ru-RU', { weekday: 'short' }),
+      date: d.getDate(),
+      month: d.toLocaleDateString('ru-RU', { month: 'short' }),
+      isToday: dateStr === todayStr,
+    };
   };
+
+  const getEntryColor = (trainingTypeId: string) => {
+    const tt = state.trainingTypes.find(t => t.id === trainingTypeId);
+    if (!tt) return '#888';
+    if (tt.categoryId) {
+      const cat = state.trainingCategories.find(c => c.id === tt.categoryId);
+      if (cat) return cat.color;
+    }
+    return tt.color;
+  };
+
+  const selectedEntry = selectedEntryId ? state.schedule.find(e => e.id === selectedEntryId) : null;
 
   const handleAddEntry = () => {
     if (!form.trainingTypeId || !form.trainerId) return;
@@ -45,12 +70,18 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       trainingTypeId: form.trainingTypeId,
       trainerId: form.trainerId,
       branchId: state.currentBranchId,
-      date: selectedDate,
+      date: addForDate,
       time: form.time,
       maxCapacity: form.maxCapacity,
+      hallId: form.hallId || undefined,
     });
     setShowAdd(false);
-    setForm({ trainingTypeId: '', trainerId: '', time: '09:00', maxCapacity: 15 });
+    setForm({ trainingTypeId: '', trainerId: '', time: '09:00', maxCapacity: 15, hallId: '' });
+  };
+
+  const openAddFor = (date: string) => {
+    setAddForDate(date);
+    setShowAdd(true);
   };
 
   const filteredClients = state.clients.filter(c =>
@@ -63,14 +94,9 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === entryId);
     if (!visit) return;
     const sub = state.clients.find(c => c.id === clientId)?.activeSubscriptionId || null;
-    if (status === 'cancelled') {
-      markVisit(visit.id, 'missed', sub, false, 0);
-    } else {
-      markVisit(visit.id, status, sub, false, 0);
-    }
+    markVisit(visit.id, status, sub, false, 0);
   };
 
-  // Helpers for badges
   const isFirstEverTraining = (clientId: string) => {
     const clientVisits = state.visits.filter(v => v.clientId === clientId && v.status !== 'enrolled');
     return clientVisits.length === 0;
@@ -81,8 +107,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     if (!client?.activeSubscriptionId) return false;
     const sub = state.subscriptions.find(s => s.id === client.activeSubscriptionId);
     if (!sub) return false;
-    const today = new Date().toISOString().split('T')[0];
-    return sub.endDate <= today;
+    return sub.endDate <= todayStr;
   };
 
   const openClientCard = state.clients.find(c => c.id === openClientId);
@@ -104,76 +129,96 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   }
 
   return (
-    <div className="flex gap-5 h-full animate-fade-in">
-      {/* Left: schedule */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Date strip */}
-        <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-          {getDates().map(d => {
-            const { day, date } = formatDate(d);
-            const isToday = d === new Date().toISOString().split('T')[0];
-            const isSelected = d === selectedDate;
-            return (
-              <button
-                key={d}
-                onClick={() => setSelectedDate(d)}
-                className={`flex flex-col items-center px-3 py-2.5 rounded-xl shrink-0 transition-colors ${isSelected ? 'bg-foreground text-primary-foreground' : 'bg-white border border-border hover:bg-secondary'}`}
-              >
-                <span className="text-xs capitalize">{day}</span>
-                <span className={`text-lg font-semibold leading-tight ${isToday && !isSelected ? 'text-blue-600' : ''}`}>{date}</span>
-              </button>
-            );
-          })}
+    <div className="flex gap-5 h-full animate-fade-in min-h-0">
+      {/* Left: week grid */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Week navigation */}
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <button
-            onClick={() => setShowAdd(true)}
-            className="flex flex-col items-center px-3 py-2.5 rounded-xl shrink-0 border border-dashed border-border hover:bg-secondary transition-colors"
+            onClick={() => setWeekOffset(w => w - 1)}
+            className="p-2 rounded-lg hover:bg-secondary transition-colors"
           >
-            <Icon name="Plus" size={20} className="text-muted-foreground" />
-            <span className="text-xs text-muted-foreground mt-0.5">Добавить</span>
+            <Icon name="ChevronLeft" size={18} />
           </button>
+          <div className="text-sm font-medium">
+            {new Date(weekDays[0] + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+            {' — '}
+            {new Date(weekDays[6] + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+          <div className="flex items-center gap-2">
+            {weekOffset !== 0 && (
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 transition-colors"
+              >
+                Сегодня
+              </button>
+            )}
+            <button
+              onClick={() => setWeekOffset(w => w + 1)}
+              className="p-2 rounded-lg hover:bg-secondary transition-colors"
+            >
+              <Icon name="ChevronRight" size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* Entries */}
-        <div className="space-y-3 flex-1 overflow-y-auto">
-          {branchEntries.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <Icon name="Calendar" size={32} className="mx-auto mb-3 opacity-30" />
-              <div className="text-sm">Нет занятий на этот день</div>
-            </div>
-          )}
-          {branchEntries.sort((a, b) => a.time.localeCompare(b.time)).map(entry => {
-            const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
-            const trainer = state.trainers.find(t => t.id === entry.trainerId);
-            const enrolledCount = entry.enrolledClientIds.length;
-            const fillPct = (enrolledCount / entry.maxCapacity) * 100;
-            const isSelected = selectedEntryId === entry.id;
-            return (
-              <div key={entry.id}>
-                <div
-                  onClick={() => setSelectedEntryId(entry.id === selectedEntryId ? null : entry.id)}
-                  className={`bg-white border rounded-xl p-4 cursor-pointer transition-all ${isSelected ? 'border-foreground shadow-sm' : 'border-border hover:shadow-sm'}`}
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-1 h-12 rounded-full shrink-0 mt-0.5" style={{ background: tt?.color || '#888' }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold">{entry.time}</span>
-                        <span className="font-medium">{tt?.name}</span>
-                        <span className="text-sm text-muted-foreground">{tt?.duration} мин</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-0.5">{trainer?.name}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-medium">{enrolledCount} / {entry.maxCapacity}</div>
-                      <div className="w-16 h-1.5 bg-secondary rounded-full mt-1.5 overflow-hidden">
-                        <div className="h-full bg-foreground rounded-full" style={{ width: `${fillPct}%` }} />
-                      </div>
-                    </div>
+        {/* Week grid */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-7 gap-2 min-w-0">
+            {weekDays.map(dateStr => {
+              const { weekday, date, month, isToday } = formatDayHeader(dateStr);
+              const dayEntries = state.schedule
+                .filter(e => e.branchId === state.currentBranchId && e.date === dateStr)
+                .sort((a, b) => a.time.localeCompare(b.time));
+
+              return (
+                <div key={dateStr} className="flex flex-col min-h-0">
+                  {/* Day header */}
+                  <div className={`text-center py-2 px-1 rounded-xl mb-2 shrink-0 ${isToday ? 'bg-foreground text-primary-foreground' : 'bg-white border border-border'}`}>
+                    <div className="text-xs capitalize opacity-70">{weekday}</div>
+                    <div className="text-lg font-bold leading-tight">{date}</div>
+                    <div className="text-xs opacity-60">{month}</div>
+                  </div>
+
+                  {/* Entries */}
+                  <div className="space-y-1.5 flex-1">
+                    {dayEntries.map(entry => {
+                      const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
+                      const color = getEntryColor(entry.trainingTypeId);
+                      const isSelected = selectedEntryId === entry.id;
+                      const fillPct = (entry.enrolledClientIds.length / entry.maxCapacity) * 100;
+                      return (
+                        <div
+                          key={entry.id}
+                          onClick={() => setSelectedEntryId(entry.id === selectedEntryId ? null : entry.id)}
+                          className={`rounded-lg p-2 cursor-pointer transition-all border ${isSelected ? 'border-foreground shadow-sm' : 'border-transparent hover:border-border'}`}
+                          style={{ background: color + '18', borderLeftColor: color, borderLeftWidth: 3 }}
+                        >
+                          <div className="text-xs font-semibold" style={{ color }}>{entry.time}</div>
+                          <div className="text-xs font-medium text-foreground leading-tight mt-0.5 truncate">{tt?.name}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {entry.enrolledClientIds.length}/{entry.maxCapacity}
+                          </div>
+                          <div className="w-full h-1 bg-white/50 rounded-full mt-1 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${fillPct}%`, background: color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Add button */}
+                    <button
+                      onClick={() => openAddFor(dateStr)}
+                      className="w-full py-1.5 rounded-lg border border-dashed border-border hover:bg-secondary transition-colors"
+                    >
+                      <Icon name="Plus" size={14} className="mx-auto text-muted-foreground" />
+                    </button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -181,14 +226,19 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       {selectedEntry && (() => {
         const tt = state.trainingTypes.find(t => t.id === selectedEntry.trainingTypeId);
         const trainer = state.trainers.find(t => t.id === selectedEntry.trainerId);
+        const hall = selectedEntry.hallId ? state.halls.find(h => h.id === selectedEntry.hallId) : null;
+        const color = getEntryColor(selectedEntry.trainingTypeId);
+        const entryDate = new Date(selectedEntry.date + 'T12:00:00').toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
         return (
           <div className="w-96 shrink-0 bg-white border border-border rounded-xl overflow-hidden flex flex-col animate-slide-in-right">
-            <div className="px-4 py-4 border-b border-border" style={{ borderTop: `3px solid ${tt?.color || '#888'}` }}>
+            <div className="px-4 py-4 border-b border-border" style={{ borderTop: `3px solid ${color}` }}>
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold">{tt?.name}</div>
                   <div className="text-sm text-muted-foreground">{selectedEntry.time} · {tt?.duration} мин</div>
-                  <div className="text-xs text-muted-foreground mt-1">{trainer?.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 capitalize">{entryDate}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{trainer?.name}</div>
+                  {hall && <div className="text-xs text-muted-foreground mt-0.5">Зал: {hall.name}</div>}
                 </div>
                 <button onClick={() => setSelectedEntryId(null)} className="text-muted-foreground hover:text-foreground">
                   <Icon name="X" size={15} />
@@ -215,10 +265,11 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 const subEnding = isSubEndingToday(clientId);
                 const clientSub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
 
-                const statusMap: Record<string, { label: string; color: string; icon: string }> = {
-                  attended: { label: 'Пришёл', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'Check' },
-                  missed: { label: 'Не пришёл', color: 'text-red-600 bg-red-50 border-red-200', icon: 'X' },
-                  enrolled: { label: 'Записан', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: 'Clock' },
+                const statusMap: Record<string, { label: string; color: string }> = {
+                  attended: { label: 'Пришёл', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+                  missed: { label: 'Не пришёл', color: 'text-red-600 bg-red-50 border-red-200' },
+                  cancelled: { label: 'Отменил', color: 'text-orange-600 bg-orange-50 border-orange-200' },
+                  enrolled: { label: 'Записан', color: 'text-blue-600 bg-blue-50 border-blue-200' },
                 };
                 const currentStatus = visit?.status || 'enrolled';
                 const statusInfo = statusMap[currentStatus] || statusMap.enrolled;
@@ -235,10 +286,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                             {client.lastName} {client.firstName}
                           </button>
                           {isFirst && (
-                            <span title="Первая тренировка" className="text-xs px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">1-й раз</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">1-й раз</span>
                           )}
                           {subEnding && (
-                            <span title="Абонемент истекает сегодня" className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">⚠ абон. кончается</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">⚠ абон. кончается</span>
                           )}
                         </div>
                         {client.comment && (
@@ -255,36 +306,34 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                       </div>
 
                       {/* Status actions */}
-                      {visit && (
-                        <div className="shrink-0 flex flex-col gap-1 items-end">
-                          {currentStatus === 'enrolled' ? (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'attended')}
-                                className="text-xs px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors font-medium"
-                              >
-                                ✓ Пришёл
-                              </button>
-                              <button
-                                onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'missed')}
-                                className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors font-medium"
-                              >
-                                ✗ Нет
-                              </button>
-                              <button
-                                onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'cancelled')}
-                                className="text-xs px-2 py-1 rounded-lg bg-secondary text-muted-foreground border border-border hover:bg-secondary/80 transition-colors font-medium"
-                              >
-                                Отмена
-                              </button>
-                            </div>
-                          ) : (
-                            <span className={`text-xs px-2 py-1 rounded-lg border font-medium ${statusInfo.color}`}>
-                              {statusInfo.label}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      <div className="shrink-0 flex flex-col gap-1 items-end">
+                        {currentStatus === 'enrolled' ? (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'attended')}
+                              className="text-xs px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors font-medium"
+                            >
+                              ✓ Пришёл
+                            </button>
+                            <button
+                              onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'missed')}
+                              className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors font-medium"
+                            >
+                              ✗ Нет
+                            </button>
+                            <button
+                              onClick={() => handleMarkVisit(clientId, selectedEntry.id, 'cancelled')}
+                              className="text-xs px-2 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors font-medium"
+                            >
+                              Отменил
+                            </button>
+                          </div>
+                        ) : (
+                          <span className={`text-xs px-2 py-1 rounded-lg border font-medium ${statusInfo.color}`}>
+                            {statusInfo.label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -325,7 +374,12 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       {/* Add entry modal */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Добавить занятие</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              Добавить занятие —{' '}
+              {addForDate ? new Date(addForDate + 'T12:00:00').toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }) : ''}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Тип тренировки *</Label>
@@ -344,6 +398,16 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 <option value="">Выбрать...</option>
                 {state.trainers.filter(t => t.branchId === state.currentBranchId).map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Зал</Label>
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm"
+                value={form.hallId} onChange={e => setForm(f => ({ ...f, hallId: e.target.value }))}>
+                <option value="">Без зала</option>
+                {state.halls.filter(h => h.branchId === state.currentBranchId).map(h => (
+                  <option key={h.id} value={h.id}>{h.name} ({h.capacity} мест)</option>
                 ))}
               </select>
             </div>

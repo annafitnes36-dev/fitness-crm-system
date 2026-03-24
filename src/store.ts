@@ -9,11 +9,24 @@ export interface Branch {
   phone: string;
 }
 
+export interface Hall {
+  id: string;
+  name: string;
+  capacity: number;
+  branchId: string;
+}
+
 export interface Trainer {
   id: string;
   name: string;
   specialty: string;
   branchId: string;
+}
+
+export interface TrainingCategory {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface TrainingType {
@@ -24,6 +37,7 @@ export interface TrainingType {
   trainerIds: string[];
   branchIds: string[];
   color: string;
+  categoryId?: string;
 }
 
 export interface SubscriptionPlan {
@@ -81,6 +95,7 @@ export interface ScheduleEntry {
   time: string;
   maxCapacity: number;
   enrolledClientIds: string[];
+  hallId?: string;
 }
 
 export interface Visit {
@@ -88,7 +103,7 @@ export interface Visit {
   clientId: string;
   scheduleEntryId: string;
   date: string;
-  status: 'attended' | 'missed' | 'enrolled';
+  status: 'attended' | 'missed' | 'enrolled' | 'cancelled';
   subscriptionId: string | null;
   isSingleVisit: boolean;
   price: number;
@@ -128,9 +143,30 @@ export interface Inquiry {
   note: string;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  branchId: string;
+}
+
+export interface Expense {
+  id: string;
+  branchId: string;
+  categoryId: string;
+  amount: number;
+  date: string;
+  comment: string;
+  paymentMethod: 'cash' | 'card';
+}
+
 const defaultBranches: Branch[] = [
   { id: 'b1', name: 'Центральный', address: 'ул. Ленина, 1', phone: '+7 (999) 000-00-01' },
   { id: 'b2', name: 'Северный', address: 'пр. Победы, 15', phone: '+7 (999) 000-00-02' },
+];
+
+const defaultHalls: Hall[] = [
+  { id: 'h1', name: 'Зал 1', capacity: 20, branchId: 'b1' },
+  { id: 'h2', name: 'Зал 2 (Танцевальный)', capacity: 30, branchId: 'b1' },
 ];
 
 const defaultTrainers: Trainer[] = [
@@ -139,11 +175,17 @@ const defaultTrainers: Trainer[] = [
   { id: 't3', name: 'Сидорова Мария Андреевна', specialty: 'Зумба, Аэробика', branchId: 'b2' },
 ];
 
+const defaultTrainingCategories: TrainingCategory[] = [
+  { id: 'tc1', name: 'Растяжка и релаксация', color: '#6366f1' },
+  { id: 'tc2', name: 'Силовые', color: '#f59e0b' },
+  { id: 'tc3', name: 'Танцы', color: '#ec4899' },
+];
+
 const defaultTrainingTypes: TrainingType[] = [
-  { id: 'tt1', name: 'Йога', duration: 60, description: 'Занятия для гибкости и расслабления', trainerIds: ['t1'], branchIds: ['b1'], color: '#6366f1' },
-  { id: 'tt2', name: 'Силовая тренировка', duration: 60, description: 'Работа с весами и собственным весом', trainerIds: ['t2'], branchIds: ['b1'], color: '#f59e0b' },
-  { id: 'tt3', name: 'Зумба', duration: 45, description: 'Танцевальная аэробика', trainerIds: ['t3'], branchIds: ['b2'], color: '#ec4899' },
-  { id: 'tt4', name: 'Пилатес', duration: 55, description: 'Укрепление мышц кора', trainerIds: ['t1'], branchIds: ['b1', 'b2'], color: '#10b981' },
+  { id: 'tt1', name: 'Йога', duration: 60, description: 'Занятия для гибкости и расслабления', trainerIds: ['t1'], branchIds: ['b1'], color: '#6366f1', categoryId: 'tc1' },
+  { id: 'tt2', name: 'Силовая тренировка', duration: 60, description: 'Работа с весами и собственным весом', trainerIds: ['t2'], branchIds: ['b1'], color: '#f59e0b', categoryId: 'tc2' },
+  { id: 'tt3', name: 'Зумба', duration: 45, description: 'Танцевальная аэробика', trainerIds: ['t3'], branchIds: ['b2'], color: '#ec4899', categoryId: 'tc3' },
+  { id: 'tt4', name: 'Пилатес', duration: 55, description: 'Укрепление мышц кора', trainerIds: ['t1'], branchIds: ['b1', 'b2'], color: '#10b981', categoryId: 'tc1' },
 ];
 
 const defaultPlans: SubscriptionPlan[] = [
@@ -178,11 +220,13 @@ const defaultSubscriptions: Subscription[] = [
 ];
 
 const defaultSchedule: ScheduleEntry[] = [
-  { id: 'se1', trainingTypeId: 'tt1', trainerId: 't1', branchId: 'b1', date: fmt(today), time: '09:00', maxCapacity: 15, enrolledClientIds: ['c1', 'c5'] },
-  { id: 'se2', trainingTypeId: 'tt2', trainerId: 't2', branchId: 'b1', date: fmt(today), time: '11:00', maxCapacity: 20, enrolledClientIds: ['c2'] },
-  { id: 'se3', trainingTypeId: 'tt1', trainerId: 't1', branchId: 'b1', date: fmt(addDays(today, 1)), time: '09:00', maxCapacity: 15, enrolledClientIds: [] },
-  { id: 'se4', trainingTypeId: 'tt4', trainerId: 't1', branchId: 'b1', date: fmt(addDays(today, 1)), time: '18:00', maxCapacity: 12, enrolledClientIds: ['c1'] },
+  { id: 'se1', trainingTypeId: 'tt1', trainerId: 't1', branchId: 'b1', date: fmt(today), time: '09:00', maxCapacity: 15, enrolledClientIds: ['c1', 'c5'], hallId: 'h1' },
+  { id: 'se2', trainingTypeId: 'tt2', trainerId: 't2', branchId: 'b1', date: fmt(today), time: '11:00', maxCapacity: 20, enrolledClientIds: ['c2'], hallId: 'h2' },
+  { id: 'se3', trainingTypeId: 'tt1', trainerId: 't1', branchId: 'b1', date: fmt(addDays(today, 1)), time: '09:00', maxCapacity: 15, enrolledClientIds: [], hallId: 'h1' },
+  { id: 'se4', trainingTypeId: 'tt4', trainerId: 't1', branchId: 'b1', date: fmt(addDays(today, 1)), time: '18:00', maxCapacity: 12, enrolledClientIds: ['c1'], hallId: 'h1' },
   { id: 'se5', trainingTypeId: 'tt3', trainerId: 't3', branchId: 'b2', date: fmt(today), time: '10:00', maxCapacity: 25, enrolledClientIds: [] },
+  { id: 'se6', trainingTypeId: 'tt2', trainerId: 't2', branchId: 'b1', date: fmt(addDays(today, 2)), time: '10:00', maxCapacity: 20, enrolledClientIds: [], hallId: 'h2' },
+  { id: 'se7', trainingTypeId: 'tt4', trainerId: 't1', branchId: 'b1', date: fmt(addDays(today, 3)), time: '09:30', maxCapacity: 12, enrolledClientIds: [], hallId: 'h1' },
 ];
 
 const defaultVisits: Visit[] = [
@@ -204,9 +248,24 @@ const defaultInquiries: Inquiry[] = [
   { id: 'inq3', branchId: 'b1', date: fmt(today), channel: 'Телефон', adSource: 'Вывеска', note: '' },
 ];
 
+const defaultExpenseCategories: ExpenseCategory[] = [
+  { id: 'ec1', name: 'Аренда', branchId: 'b1' },
+  { id: 'ec2', name: 'Зарплата тренеров', branchId: 'b1' },
+  { id: 'ec3', name: 'Инвентарь', branchId: 'b1' },
+  { id: 'ec4', name: 'Коммунальные', branchId: 'b1' },
+  { id: 'ec5', name: 'Реклама', branchId: 'b1' },
+];
+
+const defaultExpenses: Expense[] = [
+  { id: 'exp1', branchId: 'b1', categoryId: 'ec1', amount: 50000, date: fmt(addDays(today, -15)), comment: 'Аренда за март', paymentMethod: 'card' },
+  { id: 'exp2', branchId: 'b1', categoryId: 'ec2', amount: 30000, date: fmt(addDays(today, -10)), comment: 'Зарплата Ивановой', paymentMethod: 'cash' },
+];
+
 export interface AppState {
   branches: Branch[];
+  halls: Hall[];
   trainers: Trainer[];
+  trainingCategories: TrainingCategory[];
   trainingTypes: TrainingType[];
   subscriptionPlans: SubscriptionPlan[];
   singleVisitPlans: SingleVisitPlan[];
@@ -216,6 +275,8 @@ export interface AppState {
   visits: Visit[];
   sales: Sale[];
   inquiries: Inquiry[];
+  expenseCategories: ExpenseCategory[];
+  expenses: Expense[];
   contactChannels: string[];
   adSources: string[];
   currentBranchId: string;
@@ -223,7 +284,9 @@ export interface AppState {
 
 const initialState: AppState = {
   branches: defaultBranches,
+  halls: defaultHalls,
   trainers: defaultTrainers,
+  trainingCategories: defaultTrainingCategories,
   trainingTypes: defaultTrainingTypes,
   subscriptionPlans: defaultPlans,
   singleVisitPlans: defaultSingleVisitPlans,
@@ -233,6 +296,8 @@ const initialState: AppState = {
   visits: defaultVisits,
   sales: defaultSales,
   inquiries: defaultInquiries,
+  expenseCategories: defaultExpenseCategories,
+  expenses: defaultExpenses,
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
   adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
@@ -262,7 +327,6 @@ export function useStore() {
   const sellSubscription = (clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card') => {
     const plan = state.subscriptionPlans.find(p => p.id === planId);
     if (!plan) return;
-    const client = state.clients.find(c => c.id === clientId);
     const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription');
     const hadSub = prevSubs.length > 0;
     const lastSale = prevSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
@@ -350,7 +414,7 @@ export function useStore() {
     }));
   };
 
-  const markVisit = (visitId: string, status: 'attended' | 'missed', subscriptionId: string | null, isSingleVisit: boolean, singlePrice: number) => {
+  const markVisit = (visitId: string, status: 'attended' | 'missed' | 'cancelled', subscriptionId: string | null, isSingleVisit: boolean, singlePrice: number) => {
     update(s => {
       let newSubs = s.subscriptions;
       if (status === 'attended' && subscriptionId) {
@@ -381,13 +445,30 @@ export function useStore() {
     update(s => ({ ...s, adSources: [...s.adSources, source] }));
   };
 
+  // Expenses
+  const addExpense = (expense: Omit<Expense, 'id'>) => {
+    update(s => ({ ...s, expenses: [...s.expenses, { ...expense, id: genId() }] }));
+  };
+
+  const addExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
+    update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
+  };
+
   // Branches & Settings
   const addBranch = (branch: Omit<Branch, 'id'>) => {
     update(s => ({ ...s, branches: [...s.branches, { ...branch, id: genId() }] }));
   };
 
+  const addHall = (hall: Omit<Hall, 'id'>) => {
+    update(s => ({ ...s, halls: [...s.halls, { ...hall, id: genId() }] }));
+  };
+
   const addTrainer = (trainer: Omit<Trainer, 'id'>) => {
     update(s => ({ ...s, trainers: [...s.trainers, { ...trainer, id: genId() }] }));
+  };
+
+  const addTrainingCategory = (cat: Omit<TrainingCategory, 'id'>) => {
+    update(s => ({ ...s, trainingCategories: [...s.trainingCategories, { ...cat, id: genId() }] }));
   };
 
   const addTrainingType = (tt: Omit<TrainingType, 'id'>) => {
@@ -428,8 +509,9 @@ export function useStore() {
     sellSubscription, sellSingleVisit,
     freezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, enrollClient, markVisit,
-    addBranch, addTrainer, addTrainingType, addSubscriptionPlan, addSingleVisitPlan,
+    addBranch, addHall, addTrainer, addTrainingCategory, addTrainingType, addSubscriptionPlan, addSingleVisitPlan,
     addInquiry, addContactChannel, addAdSource,
+    addExpense, addExpenseCategory,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };

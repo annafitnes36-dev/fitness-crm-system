@@ -11,44 +11,70 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'trainers' | 'plans' | 'single' | 'sources';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats';
 
 export default function Settings({ store }: SettingsProps) {
-  const { state, addTrainingType, addTrainer, addSubscriptionPlan, addSingleVisitPlan, addContactChannel, addAdSource } = store;
+  const {
+    state,
+    addTrainingType, addTrainingCategory,
+    addTrainer,
+    addHall,
+    addSubscriptionPlan, addSingleVisitPlan,
+    addContactChannel, addAdSource,
+    addExpenseCategory,
+  } = store;
+
   const [tab, setTab] = useState<Tab>('trainings');
   const [newChannel, setNewChannel] = useState('');
   const [newSource, setNewSource] = useState('');
   const [showAddTraining, setShowAddTraining] = useState(false);
+  const [showAddTrainingCat, setShowAddTrainingCat] = useState(false);
   const [showAddTrainer, setShowAddTrainer] = useState(false);
+  const [showAddHall, setShowAddHall] = useState(false);
   const [showAddPlan, setShowAddPlan] = useState(false);
   const [showAddSingle, setShowAddSingle] = useState(false);
+  const [showAddExpenseCat, setShowAddExpenseCat] = useState(false);
 
-  const [ttForm, setTtForm] = useState({ name: '', duration: 60, description: '', color: '#6366f1' });
+  const [ttForm, setTtForm] = useState({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '' });
+  const [tcForm, setTcForm] = useState({ name: '', color: '#6366f1' });
   const [trainerForm, setTrainerForm] = useState({ name: '', specialty: '', branchId: state.currentBranchId });
+  const [hallForm, setHallForm] = useState({ name: '', capacity: 20 });
   const [planForm, setPlanForm] = useState({
     name: '', price: 0, durationDays: 30, sessionsLimit: 8 as number | 'unlimited',
     trainingTypeIds: [] as string[], freezeDays: 7
   });
   const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[] });
+  const [expenseCatForm, setExpenseCatForm] = useState({ name: '' });
 
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4'];
+  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'];
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'trainings', label: 'Тренировки', icon: 'Dumbbell' },
+    { id: 'training-cats', label: 'Категории', icon: 'Tag' },
     { id: 'trainers', label: 'Тренеры', icon: 'User' },
+    { id: 'halls', label: 'Залы', icon: 'DoorOpen' },
     { id: 'plans', label: 'Абонементы', icon: 'CreditCard' },
-    { id: 'single', label: 'Разовые визиты', icon: 'Ticket' },
+    { id: 'single', label: 'Разовые', icon: 'Ticket' },
     { id: 'sources', label: 'Источники', icon: 'Megaphone' },
+    { id: 'expense-cats', label: 'Расходы', icon: 'TrendingDown' },
   ];
 
   const handleAddTraining = () => {
     if (!ttForm.name) return;
     addTrainingType({
       name: ttForm.name, duration: ttForm.duration, description: ttForm.description,
-      trainerIds: [], branchIds: [state.currentBranchId], color: ttForm.color
+      trainerIds: [], branchIds: [state.currentBranchId], color: ttForm.color,
+      categoryId: ttForm.categoryId || undefined,
     });
     setShowAddTraining(false);
-    setTtForm({ name: '', duration: 60, description: '', color: '#6366f1' });
+    setTtForm({ name: '', duration: 60, description: '', color: '#6366f1', categoryId: '' });
+  };
+
+  const handleAddTrainingCat = () => {
+    if (!tcForm.name) return;
+    addTrainingCategory({ name: tcForm.name, color: tcForm.color });
+    setShowAddTrainingCat(false);
+    setTcForm({ name: '', color: '#6366f1' });
   };
 
   const handleAddTrainer = () => {
@@ -56,6 +82,13 @@ export default function Settings({ store }: SettingsProps) {
     addTrainer({ name: trainerForm.name, specialty: trainerForm.specialty, branchId: trainerForm.branchId });
     setShowAddTrainer(false);
     setTrainerForm({ name: '', specialty: '', branchId: state.currentBranchId });
+  };
+
+  const handleAddHall = () => {
+    if (!hallForm.name) return;
+    addHall({ name: hallForm.name, capacity: hallForm.capacity, branchId: state.currentBranchId });
+    setShowAddHall(false);
+    setHallForm({ name: '', capacity: 20 });
   };
 
   const handleAddPlan = () => {
@@ -76,15 +109,23 @@ export default function Settings({ store }: SettingsProps) {
     setSingleForm({ name: '', price: 0, trainingTypeIds: [] });
   };
 
+  const handleAddExpenseCat = () => {
+    if (!expenseCatForm.name) return;
+    addExpenseCategory({ name: expenseCatForm.name, branchId: state.currentBranchId });
+    setShowAddExpenseCat(false);
+    setExpenseCatForm({ name: '' });
+  };
+
   const toggleTT = (ids: string[], id: string, setter: (v: string[]) => void) => {
     setter(ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
   };
 
-  const branchTTs = state.trainingTypes.filter(t => t.branchIds.includes(state.currentBranchId));
+  const branchHalls = state.halls.filter(h => h.branchId === state.currentBranchId);
+  const branchExpenseCats = state.expenseCategories.filter(c => c.branchId === state.currentBranchId);
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex gap-1 bg-secondary rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-secondary rounded-xl p-1 w-fit flex-wrap">
         {tabs.map(t => (
           <button
             key={t.id}
@@ -106,19 +147,50 @@ export default function Settings({ store }: SettingsProps) {
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {state.trainingTypes.map(tt => (
-              <div key={tt.id} className="bg-white border border-border rounded-xl p-4 flex items-start gap-3">
-                <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ background: tt.color }} />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{tt.name}</div>
-                  <div className="text-sm text-muted-foreground">{tt.duration} мин</div>
-                  {tt.description && <div className="text-sm text-muted-foreground mt-1 truncate">{tt.description}</div>}
-                  <div className="text-xs text-muted-foreground mt-2">
-                    {tt.branchIds.map(id => state.branches.find(b => b.id === id)?.name).join(', ')}
+            {state.trainingTypes.map(tt => {
+              const cat = tt.categoryId ? state.trainingCategories.find(c => c.id === tt.categoryId) : null;
+              const color = cat?.color || tt.color;
+              return (
+                <div key={tt.id} className="bg-white border border-border rounded-xl p-4 flex items-start gap-3">
+                  <div className="w-3 h-3 rounded-full mt-1 shrink-0" style={{ background: color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{tt.name}</div>
+                    <div className="text-sm text-muted-foreground">{tt.duration} мин</div>
+                    {cat && (
+                      <span className="text-xs px-2 py-0.5 rounded-full mt-1 inline-block" style={{ background: cat.color + '22', color: cat.color }}>
+                        {cat.name}
+                      </span>
+                    )}
+                    {tt.description && <div className="text-sm text-muted-foreground mt-1 truncate">{tt.description}</div>}
+                    <div className="text-xs text-muted-foreground mt-2">
+                      {tt.branchIds.map(id => state.branches.find(b => b.id === id)?.name).join(', ')}
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Training categories */}
+      {tab === 'training-cats' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowAddTrainingCat(true)} className="bg-foreground text-primary-foreground hover:opacity-90">
+              <Icon name="Plus" size={14} className="mr-1.5" /> Добавить категорию
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {state.trainingCategories.map(cat => (
+              <div key={cat.id} className="bg-white border border-border rounded-xl p-4 flex items-center gap-3">
+                <div className="w-4 h-4 rounded-full shrink-0" style={{ background: cat.color }} />
+                <div className="font-medium">{cat.name}</div>
               </div>
             ))}
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+            Цвет категории используется для окрашивания тренировок в расписании. Тип тренировки наследует цвет своей категории.
           </div>
         </div>
       )}
@@ -153,6 +225,33 @@ export default function Settings({ store }: SettingsProps) {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Halls */}
+      {tab === 'halls' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowAddHall(true)} className="bg-foreground text-primary-foreground hover:opacity-90">
+              <Icon name="Plus" size={14} className="mr-1.5" /> Добавить зал
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {branchHalls.length === 0 && (
+              <div className="col-span-3 text-center py-12 text-muted-foreground text-sm">Нет залов для этого филиала</div>
+            )}
+            {branchHalls.map(hall => (
+              <div key={hall.id} className="bg-white border border-border rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 bg-secondary rounded-lg flex items-center justify-center">
+                    <Icon name="DoorOpen" size={16} className="text-muted-foreground" />
+                  </div>
+                  <div className="font-medium">{hall.name}</div>
+                </div>
+                <div className="text-sm text-muted-foreground">Вместимость: {hall.capacity} чел.</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -220,7 +319,7 @@ export default function Settings({ store }: SettingsProps) {
         </div>
       )}
 
-      {/* Sources tab */}
+      {/* Sources */}
       {tab === 'sources' && (
         <div className="space-y-6 animate-fade-in">
           <div className="grid grid-cols-2 gap-6">
@@ -277,6 +376,30 @@ export default function Settings({ store }: SettingsProps) {
         </div>
       )}
 
+      {/* Expense categories */}
+      {tab === 'expense-cats' && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowAddExpenseCat(true)} className="bg-foreground text-primary-foreground hover:opacity-90">
+              <Icon name="Plus" size={14} className="mr-1.5" /> Добавить категорию
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {branchExpenseCats.length === 0 && (
+              <div className="col-span-3 text-center py-12 text-muted-foreground text-sm">Нет категорий расходов</div>
+            )}
+            {branchExpenseCats.map(cat => (
+              <div key={cat.id} className="bg-white border border-border rounded-xl p-4 flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+                  <Icon name="TrendingDown" size={16} className="text-red-500" />
+                </div>
+                <div className="font-medium">{cat.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Add training modal */}
       <Dialog open={showAddTraining} onOpenChange={setShowAddTraining}>
         <DialogContent className="max-w-sm">
@@ -287,6 +410,16 @@ export default function Settings({ store }: SettingsProps) {
               <Input value={ttForm.name} onChange={e => setTtForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Категория</Label>
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm"
+                value={ttForm.categoryId} onChange={e => setTtForm(f => ({ ...f, categoryId: e.target.value }))}>
+                <option value="">Без категории</option>
+                {state.trainingCategories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Длительность (мин)</Label>
               <Input type="number" value={ttForm.duration} onChange={e => setTtForm(f => ({ ...f, duration: Number(e.target.value) }))} />
             </div>
@@ -295,8 +428,8 @@ export default function Settings({ store }: SettingsProps) {
               <Textarea value={ttForm.description} onChange={e => setTtForm(f => ({ ...f, description: e.target.value }))} rows={2} />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Цвет</Label>
-              <div className="flex gap-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Цвет (если нет категории)</Label>
+              <div className="flex gap-2 flex-wrap">
                 {COLORS.map(c => (
                   <button key={c} onClick={() => setTtForm(f => ({ ...f, color: c }))}
                     className={`w-6 h-6 rounded-full transition-transform ${ttForm.color === c ? 'scale-125 ring-2 ring-offset-1 ring-foreground' : ''}`}
@@ -307,6 +440,33 @@ export default function Settings({ store }: SettingsProps) {
             </div>
             <Button onClick={handleAddTraining} disabled={!ttForm.name} className="w-full bg-foreground text-primary-foreground">
               Добавить
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add training category modal */}
+      <Dialog open={showAddTrainingCat} onOpenChange={setShowAddTrainingCat}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Новая категория тренировок</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Название *</Label>
+              <Input value={tcForm.name} onChange={e => setTcForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Цвет в расписании</Label>
+              <div className="flex gap-2 flex-wrap">
+                {COLORS.map(c => (
+                  <button key={c} onClick={() => setTcForm(f => ({ ...f, color: c }))}
+                    className={`w-7 h-7 rounded-full transition-transform ${tcForm.color === c ? 'scale-125 ring-2 ring-offset-1 ring-foreground' : ''}`}
+                    style={{ background: c }}
+                  />
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleAddTrainingCat} disabled={!tcForm.name} className="w-full bg-foreground text-primary-foreground">
+              Создать категорию
             </Button>
           </div>
         </DialogContent>
@@ -334,6 +494,26 @@ export default function Settings({ store }: SettingsProps) {
             </div>
             <Button onClick={handleAddTrainer} disabled={!trainerForm.name} className="w-full bg-foreground text-primary-foreground">
               Добавить
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add hall modal */}
+      <Dialog open={showAddHall} onOpenChange={setShowAddHall}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Новый зал</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Название *</Label>
+              <Input value={hallForm.name} onChange={e => setHallForm(f => ({ ...f, name: e.target.value }))} placeholder="Зал 1, Танцевальный..." />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Вместимость (чел.)</Label>
+              <Input type="number" value={hallForm.capacity} onChange={e => setHallForm(f => ({ ...f, capacity: Number(e.target.value) }))} />
+            </div>
+            <Button onClick={handleAddHall} disabled={!hallForm.name} className="w-full bg-foreground text-primary-foreground">
+              Добавить зал
             </Button>
           </div>
         </DialogContent>
@@ -430,6 +610,26 @@ export default function Settings({ store }: SettingsProps) {
               </div>
             </div>
             <Button onClick={handleAddSingle} disabled={!singleForm.name || singleForm.price <= 0} className="w-full bg-foreground text-primary-foreground">
+              Добавить
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add expense category modal */}
+      <Dialog open={showAddExpenseCat} onOpenChange={setShowAddExpenseCat}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Новая категория расходов</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Название *</Label>
+              <Input
+                value={expenseCatForm.name}
+                onChange={e => setExpenseCatForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Аренда, Зарплата, Реклама..."
+              />
+            </div>
+            <Button onClick={handleAddExpenseCat} disabled={!expenseCatForm.name} className="w-full bg-foreground text-primary-foreground">
               Добавить
             </Button>
           </div>

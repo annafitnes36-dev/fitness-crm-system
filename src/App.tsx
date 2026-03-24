@@ -3,6 +3,7 @@ import { useStore } from '@/store';
 import Layout from '@/components/Layout';
 import SellModal from '@/components/SellModal';
 import InquiryModal from '@/components/InquiryModal';
+import ExpenseModal from '@/components/ExpenseModal';
 import Dashboard from '@/pages/Dashboard';
 import Clients from '@/pages/Clients';
 import Schedule from '@/pages/Schedule';
@@ -18,6 +19,7 @@ export default function App() {
   const [showSell, setShowSell] = useState(false);
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
+  const [showExpense, setShowExpense] = useState(false);
 
   const handleSell = (clientId?: string) => {
     setSellClientId(clientId);
@@ -40,7 +42,7 @@ export default function App() {
 
   return (
     <>
-      <Layout activePage={activePage} onNavigate={setActivePage} store={store} onSell={() => handleSell()} onInquiry={() => setShowInquiry(true)}>
+      <Layout activePage={activePage} onNavigate={setActivePage} store={store} onSell={() => handleSell()} onInquiry={() => setShowInquiry(true)} onExpense={() => setShowExpense(true)}>
         {renderPage()}
       </Layout>
       <SellModal
@@ -52,6 +54,11 @@ export default function App() {
       <InquiryModal
         open={showInquiry}
         onClose={() => setShowInquiry(false)}
+        store={store}
+      />
+      <ExpenseModal
+        open={showExpense}
+        onClose={() => setShowExpense(false)}
         store={store}
       />
     </>

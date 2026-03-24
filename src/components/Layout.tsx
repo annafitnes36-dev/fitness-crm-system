@@ -9,6 +9,7 @@ interface LayoutProps {
   store: StoreType;
   onSell: () => void;
   onInquiry: () => void;
+  onExpense: () => void;
 }
 
 const navItems = [
@@ -22,7 +23,7 @@ const navItems = [
   { id: 'settings', label: 'Настройки', icon: 'Settings' },
 ];
 
-export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry }: LayoutProps) {
+export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense }: LayoutProps) {
   const { state, setCurrentBranch } = store;
   const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
 
@@ -75,6 +76,13 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
           >
             <Icon name="PhoneIncoming" size={15} />
             Обращение
+          </button>
+          <button
+            onClick={onExpense}
+            className="w-full flex items-center justify-center gap-2 bg-secondary text-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-secondary/70 transition-colors border border-border"
+          >
+            <Icon name="TrendingDown" size={15} />
+            Расход
           </button>
         </div>
       </aside>
