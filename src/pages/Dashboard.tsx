@@ -39,13 +39,20 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const todayStr = now.toISOString().split('T')[0];
   const todaySchedule = state.schedule.filter(s => s.branchId === state.currentBranchId && s.date === todayStr);
 
+  // Visit stats for current month
+  const branchScheduleIds = new Set(state.schedule.filter(e => e.branchId === state.currentBranchId).map(e => e.id));
+  const monthVisits = state.visits.filter(v => branchScheduleIds.has(v.scheduleEntryId) && v.date >= monthStart);
+  const attendedMonth = monthVisits.filter(v => v.status === 'attended').length;
+  const missedMonth = monthVisits.filter(v => v.status === 'missed').length;
+  const cancelledMonth = monthVisits.filter(v => v.status === 'cancelled').length;
+
   const recentSales = branchSales.slice(-5).reverse();
 
   const stats = [
     { label: 'Обращений за месяц', value: totalInquiries, sub: `${monthInquiries} внешних + ${newClientsMonth} регистраций`, icon: 'PhoneIncoming', color: 'text-violet-600' },
-    { label: 'Новички купили абонемент', value: newbiesBoughtSub, sub: 'первая покупка', icon: 'UserPlus', color: 'text-emerald-600' },
     { label: 'Продаж абонементов', value: totalSubs, sub: 'за месяц', icon: 'CreditCard', color: 'text-blue-600' },
     { label: 'Средний чек', value: `${avgCheck.toLocaleString()} ₽`, sub: 'по абонементам', icon: 'TrendingUp', color: 'text-green-600' },
+    { label: 'Пришли за месяц', value: attendedMonth, sub: `${missedMonth} не пришли · ${cancelledMonth} отменили`, icon: 'UserCheck', color: 'text-emerald-600' },
   ];
 
   return (
@@ -62,6 +69,26 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Visit stats */}
+      <div className="bg-white border border-border rounded-xl p-5">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Посещаемость за месяц</div>
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'Пришли', value: attendedMonth, color: 'bg-emerald-500', textColor: 'text-emerald-600', total: attendedMonth + missedMonth + cancelledMonth },
+            { label: 'Не пришли', value: missedMonth, color: 'bg-red-400', textColor: 'text-red-600', total: attendedMonth + missedMonth + cancelledMonth },
+            { label: 'Отменили', value: cancelledMonth, color: 'bg-orange-400', textColor: 'text-orange-600', total: attendedMonth + missedMonth + cancelledMonth },
+          ].map(item => (
+            <div key={item.label}>
+              <div className={`text-2xl font-bold ${item.textColor}`}>{item.value}</div>
+              <div className="text-xs text-muted-foreground mt-0.5 mb-2">{item.label}</div>
+              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                <div className={`h-full ${item.color} rounded-full`} style={{ width: item.total ? `${(item.value / item.total) * 100}%` : '0%' }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Sales breakdown */}

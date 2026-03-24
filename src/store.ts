@@ -47,6 +47,7 @@ export interface SubscriptionPlan {
   durationDays: number;
   sessionsLimit: number | 'unlimited';
   trainingTypeIds: string[];
+  allDirections: boolean;
   freezeDays: number;
   branchId: string;
 }
@@ -189,10 +190,10 @@ const defaultTrainingTypes: TrainingType[] = [
 ];
 
 const defaultPlans: SubscriptionPlan[] = [
-  { id: 'p1', name: 'Безлимит на месяц', price: 4500, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: ['tt1', 'tt2', 'tt4'], freezeDays: 7, branchId: 'b1' },
-  { id: 'p2', name: '8 занятий', price: 3200, durationDays: 45, sessionsLimit: 8, trainingTypeIds: ['tt1', 'tt2', 'tt4'], freezeDays: 5, branchId: 'b1' },
-  { id: 'p3', name: '4 занятия', price: 1800, durationDays: 30, sessionsLimit: 4, trainingTypeIds: ['tt1', 'tt2'], freezeDays: 3, branchId: 'b1' },
-  { id: 'p4', name: 'Безлимит Зумба', price: 3000, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: ['tt3'], freezeDays: 5, branchId: 'b2' },
+  { id: 'p1', name: 'Безлимит на месяц', price: 4500, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: [], allDirections: true, freezeDays: 7, branchId: 'b1' },
+  { id: 'p2', name: '8 занятий', price: 3200, durationDays: 45, sessionsLimit: 8, trainingTypeIds: ['tt1', 'tt2', 'tt4'], allDirections: false, freezeDays: 5, branchId: 'b1' },
+  { id: 'p3', name: '4 занятия', price: 1800, durationDays: 30, sessionsLimit: 4, trainingTypeIds: ['tt1', 'tt2'], allDirections: false, freezeDays: 3, branchId: 'b1' },
+  { id: 'p4', name: 'Безлимит Зумба', price: 3000, durationDays: 30, sessionsLimit: 'unlimited', trainingTypeIds: ['tt3'], allDirections: false, freezeDays: 5, branchId: 'b2' },
 ];
 
 const defaultSingleVisitPlans: SingleVisitPlan[] = [
@@ -440,9 +441,21 @@ export function useStore() {
   const addContactChannel = (channel: string) => {
     update(s => ({ ...s, contactChannels: [...s.contactChannels, channel] }));
   };
+  const updateContactChannel = (oldVal: string, newVal: string) => {
+    update(s => ({ ...s, contactChannels: s.contactChannels.map(c => c === oldVal ? newVal : c) }));
+  };
+  const removeContactChannel = (val: string) => {
+    update(s => ({ ...s, contactChannels: s.contactChannels.filter(c => c !== val) }));
+  };
 
   const addAdSource = (source: string) => {
     update(s => ({ ...s, adSources: [...s.adSources, source] }));
+  };
+  const updateAdSource = (oldVal: string, newVal: string) => {
+    update(s => ({ ...s, adSources: s.adSources.map(a => a === oldVal ? newVal : a) }));
+  };
+  const removeAdSource = (val: string) => {
+    update(s => ({ ...s, adSources: s.adSources.filter(a => a !== val) }));
   };
 
   // Expenses
@@ -453,34 +466,82 @@ export function useStore() {
   const addExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
     update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
   };
+  const updateExpenseCategory = (id: string, data: Partial<ExpenseCategory>) => {
+    update(s => ({ ...s, expenseCategories: s.expenseCategories.map(c => c.id === id ? { ...c, ...data } : c) }));
+  };
+  const removeExpenseCategory = (id: string) => {
+    update(s => ({ ...s, expenseCategories: s.expenseCategories.filter(c => c.id !== id) }));
+  };
 
   // Branches & Settings
   const addBranch = (branch: Omit<Branch, 'id'>) => {
     update(s => ({ ...s, branches: [...s.branches, { ...branch, id: genId() }] }));
   };
+  const updateBranch = (id: string, data: Partial<Branch>) => {
+    update(s => ({ ...s, branches: s.branches.map(b => b.id === id ? { ...b, ...data } : b) }));
+  };
+  const removeBranch = (id: string) => {
+    update(s => ({ ...s, branches: s.branches.filter(b => b.id !== id) }));
+  };
 
   const addHall = (hall: Omit<Hall, 'id'>) => {
     update(s => ({ ...s, halls: [...s.halls, { ...hall, id: genId() }] }));
+  };
+  const updateHall = (id: string, data: Partial<Hall>) => {
+    update(s => ({ ...s, halls: s.halls.map(h => h.id === id ? { ...h, ...data } : h) }));
+  };
+  const removeHall = (id: string) => {
+    update(s => ({ ...s, halls: s.halls.filter(h => h.id !== id) }));
   };
 
   const addTrainer = (trainer: Omit<Trainer, 'id'>) => {
     update(s => ({ ...s, trainers: [...s.trainers, { ...trainer, id: genId() }] }));
   };
+  const updateTrainer = (id: string, data: Partial<Trainer>) => {
+    update(s => ({ ...s, trainers: s.trainers.map(t => t.id === id ? { ...t, ...data } : t) }));
+  };
+  const removeTrainer = (id: string) => {
+    update(s => ({ ...s, trainers: s.trainers.filter(t => t.id !== id) }));
+  };
 
   const addTrainingCategory = (cat: Omit<TrainingCategory, 'id'>) => {
     update(s => ({ ...s, trainingCategories: [...s.trainingCategories, { ...cat, id: genId() }] }));
+  };
+  const updateTrainingCategory = (id: string, data: Partial<TrainingCategory>) => {
+    update(s => ({ ...s, trainingCategories: s.trainingCategories.map(c => c.id === id ? { ...c, ...data } : c) }));
+  };
+  const removeTrainingCategory = (id: string) => {
+    update(s => ({ ...s, trainingCategories: s.trainingCategories.filter(c => c.id !== id) }));
   };
 
   const addTrainingType = (tt: Omit<TrainingType, 'id'>) => {
     update(s => ({ ...s, trainingTypes: [...s.trainingTypes, { ...tt, id: genId() }] }));
   };
+  const updateTrainingType = (id: string, data: Partial<TrainingType>) => {
+    update(s => ({ ...s, trainingTypes: s.trainingTypes.map(t => t.id === id ? { ...t, ...data } : t) }));
+  };
+  const removeTrainingType = (id: string) => {
+    update(s => ({ ...s, trainingTypes: s.trainingTypes.filter(t => t.id !== id) }));
+  };
 
   const addSubscriptionPlan = (plan: Omit<SubscriptionPlan, 'id'>) => {
     update(s => ({ ...s, subscriptionPlans: [...s.subscriptionPlans, { ...plan, id: genId() }] }));
   };
+  const updateSubscriptionPlan = (id: string, data: Partial<SubscriptionPlan>) => {
+    update(s => ({ ...s, subscriptionPlans: s.subscriptionPlans.map(p => p.id === id ? { ...p, ...data } : p) }));
+  };
+  const removeSubscriptionPlan = (id: string) => {
+    update(s => ({ ...s, subscriptionPlans: s.subscriptionPlans.filter(p => p.id !== id) }));
+  };
 
   const addSingleVisitPlan = (plan: Omit<SingleVisitPlan, 'id'>) => {
     update(s => ({ ...s, singleVisitPlans: [...s.singleVisitPlans, { ...plan, id: genId() }] }));
+  };
+  const updateSingleVisitPlan = (id: string, data: Partial<SingleVisitPlan>) => {
+    update(s => ({ ...s, singleVisitPlans: s.singleVisitPlans.map(p => p.id === id ? { ...p, ...data } : p) }));
+  };
+  const removeSingleVisitPlan = (id: string) => {
+    update(s => ({ ...s, singleVisitPlans: s.singleVisitPlans.filter(p => p.id !== id) }));
   };
 
   const setCurrentBranch = (branchId: string) => {
@@ -509,9 +570,17 @@ export function useStore() {
     sellSubscription, sellSingleVisit,
     freezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, enrollClient, markVisit,
-    addBranch, addHall, addTrainer, addTrainingCategory, addTrainingType, addSubscriptionPlan, addSingleVisitPlan,
-    addInquiry, addContactChannel, addAdSource,
-    addExpense, addExpenseCategory,
+    addBranch, updateBranch, removeBranch,
+    addHall, updateHall, removeHall,
+    addTrainer, updateTrainer, removeTrainer,
+    addTrainingCategory, updateTrainingCategory, removeTrainingCategory,
+    addTrainingType, updateTrainingType, removeTrainingType,
+    addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
+    addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
+    addInquiry,
+    addContactChannel, updateContactChannel, removeContactChannel,
+    addAdSource, updateAdSource, removeAdSource,
+    addExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };
