@@ -5,12 +5,14 @@ import SellModal from '@/components/SellModal';
 import InquiryModal from '@/components/InquiryModal';
 import ExpenseModal from '@/components/ExpenseModal';
 import Dashboard from '@/pages/Dashboard';
+import DirectorDashboard from '@/pages/DirectorDashboard';
 import Clients from '@/pages/Clients';
 import Schedule from '@/pages/Schedule';
 import Subscriptions from '@/pages/Subscriptions';
 import Sales from '@/pages/Sales';
 import Finance from '@/pages/Finance';
 import Branches from '@/pages/Branches';
+import Staff from '@/pages/Staff';
 import Settings from '@/pages/Settings';
 
 export default function App() {
@@ -28,6 +30,7 @@ export default function App() {
 
   const renderPage = () => {
     switch (activePage) {
+      case 'director-dashboard': return <DirectorDashboard store={store} />;
       case 'dashboard': return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
       case 'clients': return <Clients store={store} onSell={handleSell} />;
       case 'schedule': return <Schedule store={store} onSell={handleSell} />;
@@ -35,6 +38,7 @@ export default function App() {
       case 'sales': return <Sales store={store} onSell={() => handleSell()} />;
       case 'finance': return <Finance store={store} />;
       case 'branches': return <Branches store={store} />;
+      case 'staff': return <Staff store={store} />;
       case 'settings': return <Settings store={store} />;
       default: return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
     }

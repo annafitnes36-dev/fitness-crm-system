@@ -162,6 +162,89 @@ export interface SalesPlan {
   items: SalesPlanItem[];
 }
 
+export type StaffRole = 'director' | 'manager' | 'admin' | 'trainer' | 'marketer';
+
+export interface Permission {
+  // Аналитика и отчёты
+  viewDirectorDashboard: boolean;      // Дашборд директора/управляющего
+  viewAdminDashboard: boolean;         // Дашборд администратора
+  viewFinanceHistory: boolean;         // История финансовых операций
+  editDeleteOperations: boolean;       // Изменение/удаление операций
+  exportData: boolean;                 // Выгрузка данных
+  // Клиенты
+  addClients: boolean;                 // Добавление новых клиентов
+  viewClientCards: boolean;            // Просмотр карточек клиентов
+  viewPhoneNumbers: boolean;           // Видимость телефонных номеров
+  // Расписание и продажи
+  viewSchedule: boolean;               // Просмотр расписания
+  enrollClients: boolean;              // Запись клиентов
+  sellSubscriptions: boolean;          // Продажа абонементов
+  addExpenses: boolean;                // Внесение расходов
+  // Настройки
+  manageTrainings: boolean;            // Добавление/редактирование тренировок
+  manageSubscriptionPlans: boolean;    // Управление абонементами
+  manageStaff: boolean;                // Управление сотрудниками
+  manageSettings: boolean;             // Настройки системы (залы, источники)
+  manageSalesPlan: boolean;            // Установка плана продаж
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: StaffRole;
+  phone: string;
+  email: string;
+  branchIds: string[];
+  permissions: Permission;
+  createdAt: string;
+}
+
+export const ROLE_LABELS: Record<StaffRole, string> = {
+  director: 'Директор',
+  manager: 'Управляющий',
+  admin: 'Администратор',
+  trainer: 'Тренер',
+  marketer: 'Маркетолог',
+};
+
+export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
+  director: {
+    viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: true,
+    editDeleteOperations: true, exportData: true, addClients: true, viewClientCards: true,
+    viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
+    addExpenses: true, manageTrainings: true, manageSubscriptionPlans: true,
+    manageStaff: true, manageSettings: true, manageSalesPlan: true,
+  },
+  manager: {
+    viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: true,
+    editDeleteOperations: false, exportData: true, addClients: true, viewClientCards: true,
+    viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
+    addExpenses: true, manageTrainings: true, manageSubscriptionPlans: true,
+    manageStaff: false, manageSettings: true, manageSalesPlan: true,
+  },
+  admin: {
+    viewDirectorDashboard: false, viewAdminDashboard: true, viewFinanceHistory: false,
+    editDeleteOperations: false, exportData: false, addClients: true, viewClientCards: true,
+    viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
+    addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
+    manageStaff: false, manageSettings: false, manageSalesPlan: false,
+  },
+  trainer: {
+    viewDirectorDashboard: false, viewAdminDashboard: false, viewFinanceHistory: false,
+    editDeleteOperations: false, exportData: false, addClients: false, viewClientCards: true,
+    viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
+    addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
+    manageStaff: false, manageSettings: false, manageSalesPlan: false,
+  },
+  marketer: {
+    viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: false,
+    editDeleteOperations: false, exportData: true, addClients: true, viewClientCards: false,
+    viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
+    addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
+    manageStaff: false, manageSettings: false, manageSalesPlan: false,
+  },
+};
+
 export interface Expense {
   id: string;
   branchId: string;
@@ -291,10 +374,30 @@ export interface AppState {
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
   salesPlans: SalesPlan[];
+  staff: StaffMember[];
+  currentStaffId: string;
   contactChannels: string[];
   adSources: string[];
   currentBranchId: string;
 }
+
+const defaultStaff: StaffMember[] = [
+  {
+    id: 'st1', name: 'Иванов Алексей Петрович', role: 'director', phone: '+7 (999) 100-00-01',
+    email: 'director@fitcrm.ru', branchIds: ['b1', 'b2'],
+    permissions: { ...DEFAULT_PERMISSIONS.director }, createdAt: fmt(addDays(today, -365)),
+  },
+  {
+    id: 'st2', name: 'Петрова Светлана Николаевна', role: 'manager', phone: '+7 (999) 100-00-02',
+    email: 'manager@fitcrm.ru', branchIds: ['b1'],
+    permissions: { ...DEFAULT_PERMISSIONS.manager }, createdAt: fmt(addDays(today, -200)),
+  },
+  {
+    id: 'st3', name: 'Козлова Анна Викторовна', role: 'admin', phone: '+7 (999) 100-00-03',
+    email: 'admin@fitcrm.ru', branchIds: ['b1'],
+    permissions: { ...DEFAULT_PERMISSIONS.admin }, createdAt: fmt(addDays(today, -100)),
+  },
+];
 
 const initialState: AppState = {
   branches: defaultBranches,
@@ -313,6 +416,8 @@ const initialState: AppState = {
   expenseCategories: defaultExpenseCategories,
   expenses: defaultExpenses,
   salesPlans: [],
+  staff: defaultStaff,
+  currentStaffId: 'st1',
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
   adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
@@ -573,6 +678,20 @@ export function useStore() {
     update(s => ({ ...s, currentBranchId: branchId }));
   };
 
+  // Staff management
+  const addStaff = (member: Omit<StaffMember, 'id' | 'createdAt'>) => {
+    update(s => ({ ...s, staff: [...s.staff, { ...member, id: genId(), createdAt: fmt(new Date()) }] }));
+  };
+  const updateStaff = (id: string, data: Partial<StaffMember>) => {
+    update(s => ({ ...s, staff: s.staff.map(m => m.id === id ? { ...m, ...data } : m) }));
+  };
+  const removeStaff = (id: string) => {
+    update(s => ({ ...s, staff: s.staff.filter(m => m.id !== id) }));
+  };
+  const setCurrentStaff = (staffId: string) => {
+    update(s => ({ ...s, currentStaffId: staffId }));
+  };
+
   // Helpers
   const getClientCategory = (client: Client): ClientCategory => {
     const hasSub = !!client.activeSubscriptionId;
@@ -602,6 +721,7 @@ export function useStore() {
     addTrainingType, updateTrainingType, removeTrainingType,
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
+    addStaff, updateStaff, removeStaff, setCurrentStaff,
     addInquiry,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,

@@ -12,32 +12,56 @@ interface DashboardProps {
   onNavigate: (page: string) => void;
 }
 
+type PeriodKey = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+function getPeriodDates(period: PeriodKey, customFrom: string, customTo: string) {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const today = fmt(now);
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'week') { const m = new Date(now); m.setDate(now.getDate() - now.getDay() + 1); return { from: fmt(m), to: today }; }
+  if (period === 'month') return { from: fmt(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
+  if (period === 'quarter') { const q = Math.floor(now.getMonth() / 3); return { from: fmt(new Date(now.getFullYear(), q * 3, 1)), to: today }; }
+  if (period === 'year') return { from: fmt(new Date(now.getFullYear(), 0, 1)), to: today };
+  return { from: customFrom || fmt(new Date(now.getFullYear(), now.getMonth(), 1)), to: customTo || today };
+}
+
+const PERIODS: { key: PeriodKey; label: string }[] = [
+  { key: 'today', label: 'Сегодня' }, { key: 'week', label: 'Неделя' }, { key: 'month', label: 'Месяц' },
+  { key: 'quarter', label: 'Квартал' }, { key: 'year', label: 'Год' }, { key: 'custom', label: 'Период' },
+];
+
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
   const { state, getClientCategory, setSalesPlan } = store;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 
+  const [period, setPeriod] = useState<PeriodKey>('month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [showPlanEditor, setShowPlanEditor] = useState(false);
   const [planInputs, setPlanInputs] = useState<Record<string, string>>({});
 
+  const { from: periodFrom, to: periodTo } = getPeriodDates(period, customFrom, customTo);
+  const inPeriod = (date: string) => date >= periodFrom && date <= periodTo;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
-  const monthSubSales = branchSales.filter(s => s.type === 'subscription' && s.date >= monthStart);
+  const monthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
   const returnSubs = monthSubSales.filter(s => s.isReturn).length;
 
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
-  const newClientsMonth = branchClients.filter(c => c.createdAt >= monthStart).length;
-  const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && i.date >= monthStart).length;
+  const newClientsMonth = branchClients.filter(c => inPeriod(c.createdAt)).length;
+  const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).length;
   const totalInquiries = monthInquiries + newClientsMonth;
 
   const todayStr = now.toISOString().split('T')[0];
   const todaySchedule = state.schedule.filter(s => s.branchId === state.currentBranchId && s.date === todayStr);
 
   const branchScheduleIds = new Set(state.schedule.filter(e => e.branchId === state.currentBranchId).map(e => e.id));
-  const monthVisits = state.visits.filter(v => branchScheduleIds.has(v.scheduleEntryId) && v.date >= monthStart);
+  const monthVisits = state.visits.filter(v => branchScheduleIds.has(v.scheduleEntryId) && inPeriod(v.date));
   const attendedMonth = monthVisits.filter(v => v.status === 'attended').length;
   const missedMonth = monthVisits.filter(v => v.status === 'missed').length;
   const cancelledMonth = monthVisits.filter(v => v.status === 'cancelled').length;
@@ -83,6 +107,25 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Period selector */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 bg-secondary rounded-xl p-1">
+          {PERIODS.map(p => (
+            <button key={p.key} onClick={() => setPeriod(p.key)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${period === p.key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {period === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border border-input rounded-lg px-3 py-1.5 text-sm" />
+            <span className="text-muted-foreground text-sm">—</span>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border border-input rounded-lg px-3 py-1.5 text-sm" />
+          </div>
+        )}
+      </div>
+
       {/* Key stats: в нужном порядке */}
       <div className="grid grid-cols-4 gap-4">
         {[

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Icon from '@/components/ui/icon';
-import { StoreType } from '@/store';
+import { StoreType, ROLE_LABELS } from '@/store';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,6 +13,7 @@ interface LayoutProps {
 }
 
 const navItems = [
+  { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp' },
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard' },
   { id: 'clients', label: 'Клиенты', icon: 'Users' },
   { id: 'schedule', label: 'Расписание', icon: 'Calendar' },
@@ -20,12 +21,14 @@ const navItems = [
   { id: 'sales', label: 'Продажи', icon: 'ShoppingBag' },
   { id: 'finance', label: 'Финансы', icon: 'BarChart3' },
   { id: 'branches', label: 'Филиалы', icon: 'Building2' },
+  { id: 'staff', label: 'Сотрудники', icon: 'UserCog' },
   { id: 'settings', label: 'Настройки', icon: 'Settings' },
 ];
 
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense }: LayoutProps) {
-  const { state, setCurrentBranch } = store;
+  const { state, setCurrentBranch, setCurrentStaff } = store;
   const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
+  const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -95,8 +98,14 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
           </h1>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>{currentBranch?.name}</span>
-            <div className="w-7 h-7 bg-secondary rounded-full flex items-center justify-center">
-              <Icon name="User" size={14} />
+            <div className="flex items-center gap-2 bg-secondary rounded-lg px-2 py-1">
+              <Icon name="User" size={13} />
+              <select value={state.currentStaffId} onChange={e => setCurrentStaff(e.target.value)}
+                className="bg-transparent text-xs font-medium text-foreground outline-none cursor-pointer max-w-36 truncate">
+                {state.staff.map(m => (
+                  <option key={m.id} value={m.id}>{m.name.split(' ').slice(0, 2).join(' ')} ({ROLE_LABELS[m.role]})</option>
+                ))}
+              </select>
             </div>
           </div>
         </header>

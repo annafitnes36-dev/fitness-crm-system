@@ -41,17 +41,18 @@ export default function Clients({ store, onSell }: ClientsProps) {
   // Advanced filters
   const [filterPlanId, setFilterPlanId] = useState('');
   const [filterBranchId, setFilterBranchId] = useState('');
-  const [filterSubStart, setFilterSubStart] = useState('');
-  const [filterSubEnd, setFilterSubEnd] = useState('');
-  const [filterBirthMonth, setFilterBirthMonth] = useState('');
+  const [filterSubPurchaseDate, setFilterSubPurchaseDate] = useState('');
+  const [filterSubEndDate, setFilterSubEndDate] = useState('');
+  const [filterBirthDate, setFilterBirthDate] = useState(''); // YYYY-MM-DD or MM-DD for month-day
 
-  const activeFiltersCount = [filterPlanId, filterBranchId, filterSubStart, filterSubEnd, filterBirthMonth].filter(Boolean).length;
+  const activeFiltersCount = [filterPlanId, filterBranchId, filterSubPurchaseDate, filterSubEndDate, filterBirthDate].filter(Boolean).length;
 
   const clearFilters = () => {
-    setFilterPlanId(''); setFilterBranchId(''); setFilterSubStart('');
-    setFilterSubEnd(''); setFilterBirthMonth('');
+    setFilterPlanId(''); setFilterBranchId(''); setFilterSubPurchaseDate('');
+    setFilterSubEndDate(''); setFilterBirthDate('');
   };
 
+  // Фильтр по филиалу — по месту регистрации клиента (branchId в карточке)
   const allBranchClients = filterBranchId === '__all__'
     ? state.clients
     : filterBranchId
@@ -65,11 +66,14 @@ export default function Clients({ store, onSell }: ClientsProps) {
     const sub = c.activeSubscriptionId ? state.subscriptions.find(s => s.id === c.activeSubscriptionId) : null;
 
     const matchPlan = !filterPlanId || (sub?.planId === filterPlanId);
-    const matchSubStart = !filterSubStart || (sub?.purchaseDate && sub.purchaseDate >= filterSubStart);
-    const matchSubEnd = !filterSubEnd || (sub?.endDate && sub.endDate <= filterSubEnd);
-    const matchBirth = !filterBirthMonth || (c.birthDate && c.birthDate.slice(5, 7) === filterBirthMonth.padStart(2, '0'));
+    // Конкретная дата покупки абонемента
+    const matchSubPurchase = !filterSubPurchaseDate || (sub?.purchaseDate === filterSubPurchaseDate);
+    // Конкретная дата истечения абонемента
+    const matchSubEnd = !filterSubEndDate || (sub?.endDate === filterSubEndDate);
+    // День рождения: конкретная дата (сравниваем MM-DD)
+    const matchBirth = !filterBirthDate || (c.birthDate && c.birthDate.slice(5) === filterBirthDate.slice(5));
 
-    return matchSearch && matchCat && matchPlan && matchSubStart && matchSubEnd && matchBirth;
+    return matchSearch && matchCat && matchPlan && matchSubPurchase && matchSubEnd && matchBirth;
   });
 
   // Global search by phone (other branches)
@@ -139,7 +143,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Филиал</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Филиал регистрации</label>
                 <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterBranchId} onChange={e => setFilterBranchId(e.target.value)}>
                   <option value="">Текущий филиал</option>
                   {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -147,24 +151,29 @@ export default function Clients({ store, onSell }: ClientsProps) {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Абон. куплен с</label>
-                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubStart} onChange={e => setFilterSubStart(e.target.value)} />
+                <label className="text-xs text-muted-foreground mb-1 block">Дата покупки абонемента</label>
+                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubPurchaseDate} onChange={e => setFilterSubPurchaseDate(e.target.value)} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Абон. истекает до</label>
-                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubEnd} onChange={e => setFilterSubEnd(e.target.value)} />
+                <label className="text-xs text-muted-foreground mb-1 block">Дата истечения абонемента</label>
+                <input type="date" className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterSubEndDate} onChange={e => setFilterSubEndDate(e.target.value)} />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Месяц рождения</label>
-                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={filterBirthMonth} onChange={e => setFilterBirthMonth(e.target.value)}>
-                  <option value="">Любой</option>
-                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, i) => (
-                    <option key={m} value={m}>{new Date(2000, i, 1).toLocaleDateString('ru-RU', { month: 'long' })}</option>
-                  ))}
-                </select>
+              <div className="col-span-2">
+                <label className="text-xs text-muted-foreground mb-1 block">День рождения (конкретная дата)</label>
+                <div className="flex items-center gap-2">
+                  <input type="date" className="flex-1 border border-input rounded-lg px-3 py-2 text-sm" value={filterBirthDate} onChange={e => setFilterBirthDate(e.target.value)} />
+                  <button
+                    onClick={() => setFilterBirthDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs px-3 py-2 border border-border rounded-lg hover:bg-secondary transition-colors whitespace-nowrap"
+                  >
+                    Сегодня
+                  </button>
+                  {filterBirthDate && <button onClick={() => setFilterBirthDate('')} className="text-xs text-muted-foreground hover:text-foreground">✕</button>}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Сравниваются только день и месяц (год не учитывается)</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">Найдено: {filtered.length} клиентов</div>
+            <div className="text-xs text-muted-foreground font-medium">Найдено: {filtered.length} клиентов</div>
           </div>
         )}
 
