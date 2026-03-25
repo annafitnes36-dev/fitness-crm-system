@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 
 interface DashboardProps {
   store: StoreType;
@@ -31,16 +27,13 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
-  const { state, getClientCategory, setSalesPlan } = store;
+  const { state, getClientCategory } = store;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   const [period, setPeriod] = useState<PeriodKey>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [showPlanEditor, setShowPlanEditor] = useState(false);
-  const [planInputs, setPlanInputs] = useState<Record<string, string>>({});
-
   const { from: periodFrom, to: periodTo } = getPeriodDates(period, customFrom, customTo);
   const inPeriod = (date: string) => date >= periodFrom && date <= periodTo;
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
@@ -82,24 +75,6 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const totalSold = planRows.reduce((s, r) => s + r.sold, 0);
   const totalLeft = planRows.reduce((s, r) => s + r.left, 0);
   const totalPct = totalTarget > 0 ? Math.min(100, Math.round((totalSold / totalTarget) * 100)) : null;
-
-  const openPlanEditor = () => {
-    const init: Record<string, string> = {};
-    branchPlans.forEach(p => {
-      const t = currentPlan?.items.find(i => i.planId === p.id)?.target ?? 0;
-      init[p.id] = t > 0 ? String(t) : '';
-    });
-    setPlanInputs(init);
-    setShowPlanEditor(true);
-  };
-
-  const savePlan = () => {
-    const items = branchPlans
-      .map(p => ({ planId: p.id, target: Number(planInputs[p.id] || 0) }))
-      .filter(i => i.target > 0);
-    setSalesPlan(state.currentBranchId, currentMonth, items);
-    setShowPlanEditor(false);
-  };
 
   const recentSales = branchSales.slice(-5).reverse();
 
@@ -152,10 +127,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">План продаж</div>
             <div className="text-xs text-muted-foreground mt-0.5 capitalize">{monthLabel}</div>
           </div>
-          <Button onClick={openPlanEditor} variant="outline" className="text-xs h-8 px-3">
-            <Icon name="Settings" size={13} className="mr-1.5" />
-            Задать план
-          </Button>
+
         </div>
         {branchPlans.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Нет абонементов для этого филиала</div>
@@ -349,26 +321,6 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         {recentSales.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">Продаж пока нет</div>}
       </div>
 
-      {/* Plan editor modal */}
-      <Dialog open={showPlanEditor} onOpenChange={setShowPlanEditor}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>План продаж — <span className="capitalize">{monthLabel}</span></DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Укажите целевое количество продаж для каждого абонемента в этом месяце.</p>
-            {branchPlans.map(plan => (
-              <div key={plan.id} className="flex items-center gap-3">
-                <Label className="flex-1 text-sm">{plan.name}</Label>
-                <Input type="number" min="0" placeholder="0" value={planInputs[plan.id] || ''}
-                  onChange={e => setPlanInputs(p => ({ ...p, [plan.id]: e.target.value }))}
-                  className="w-24 text-center" />
-              </div>
-            ))}
-            <Button onClick={savePlan} className="w-full bg-foreground text-primary-foreground mt-2">Сохранить план</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

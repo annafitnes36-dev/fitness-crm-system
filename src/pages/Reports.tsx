@@ -526,19 +526,10 @@ export default function Reports({ store }: ReportsProps) {
   );
 }
 
-type SalesTableMetric = 'count' | 'sum';
-
-function SalesTable({
-  title, headerBg, items, months, salesType, metric, state, filterBranchIds, plansMap, onExport,
-}: {
-  title: string; headerBg: string;
-  items: { id: string; name: string }[];
-  months: string[];
-  salesType: 'subscription' | 'single';
-  metric: SalesTableMetric;
+function SalesReport({ state, months, filterBranchIds, onExport }: {
   state: StoreType['state'];
+  months: string[];
   filterBranchIds: string[];
-  plansMap: Record<string, Record<string, number>>;
   onExport: () => void;
 }) {
   const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
@@ -548,230 +539,150 @@ function SalesTable({
     return d.getFullYear() === y && d.getMonth() + 1 === mo;
   };
 
-  // fact[month][itemId] = {count, sum}
-  const factMap = useMemo(() => {
-    const map: Record<string, Record<string, { count: number; sum: number }>> = {};
-    months.forEach(month => {
-      map[month] = {};
-      items.forEach(item => {
-        const sales = state.sales.filter(s => s.type === salesType && s.itemId === item.id && inM(s.date, month) && bf(s.branchId));
-        map[month][item.id] = { count: sales.length, sum: sales.reduce((a, s) => a + s.finalPrice, 0) };
-      });
-    });
-    return map;
-  }, [months, items, state.sales, filterBranchIds]);
-
-  const getVal = (month: string, itemId: string): number => {
-    const f = factMap[month]?.[itemId];
-    if (!f) return 0;
-    return metric === 'count' ? f.count : f.sum;
-  };
-
-  const getPlan = (month: string, itemId: string): number | undefined =>
-    plansMap[month]?.[itemId];
-
-  const fmtV = (v: number) => metric === 'count' ? (v === 0 ? '—' : String(v)) : (v === 0 ? '—' : v.toLocaleString('ru-RU') + ' ₽');
-
-  // Итоги по столбцу (за год)
-  const yearFact = items.map(item => ({
-    id: item.id,
-    count: months.reduce((s, m) => s + (factMap[m]?.[item.id]?.count ?? 0), 0),
-    sum: months.reduce((s, m) => s + (factMap[m]?.[item.id]?.sum ?? 0), 0),
-  }));
-  const yearPlan = items.map(item => ({
-    id: item.id,
-    count: months.reduce((s, m) => s + (plansMap[m]?.[item.id] ?? 0), 0),
-  }));
-  const totalYearCount = yearFact.reduce((s, x) => s + x.count, 0);
-  const totalYearSum = yearFact.reduce((s, x) => s + x.sum, 0);
-  const totalYearAvg = totalYearCount > 0 ? totalYearSum / totalYearCount : 0;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-semibold">{title}</h3>
-        <button onClick={onExport} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-          <Icon name="Download" size={12} /> CSV
-        </button>
-      </div>
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className={`border-b border-border ${headerBg}`}>
-                <th className={`text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 ${headerBg} min-w-[110px] z-10`}>Месяц</th>
-                {items.map(item => (
-                  <th key={item.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[120px]">{item.name}</th>
-                ))}
-                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[100px]">Итого</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((month, i) => {
-                const rowTotal = items.reduce((s, item) => {
-                  const f = factMap[month]?.[item.id];
-                  return s + (metric === 'count' ? (f?.count ?? 0) : (f?.sum ?? 0));
-                }, 0);
-                return (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES[i]}
-                    </td>
-                    {items.map(item => {
-                      const val = getVal(month, item.id);
-                      const plan = metric === 'count' ? getPlan(month, item.id) : undefined;
-                      const pct = plan !== undefined && plan > 0 ? ((val - plan) / plan) * 100 : null;
-                      return (
-                        <td key={item.id} className="px-3 py-2 text-center">
-                          <span className="font-medium">{fmtV(val)}</span>
-                          {pct !== null && (
-                            <span className={`ml-1 text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-2 text-center font-semibold">{fmtV(rowTotal)}</td>
-                  </tr>
-                );
-              })}
-              {/* Итого год */}
-              <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                {yearFact.map((yf, idx) => {
-                  const val = metric === 'count' ? yf.count : yf.sum;
-                  const planTotal = yearPlan[idx]?.count;
-                  const pct = metric === 'count' && planTotal && planTotal > 0 ? ((yf.count - planTotal) / planTotal) * 100 : null;
-                  return (
-                    <td key={yf.id} className="px-3 py-2 text-center">
-                      <span>{fmtV(val)}</span>
-                      {pct !== null && (
-                        <span className={`ml-1 text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
-                        </span>
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2 text-center">{fmtV(metric === 'count' ? totalYearCount : totalYearSum)}</td>
-              </tr>
-              {/* Средний чек */}
-              <tr className="border-t border-border/50 bg-secondary/30 text-muted-foreground">
-                <td className="px-4 py-2 sticky left-0 z-10 italic whitespace-nowrap" style={{ background: 'rgb(248 249 250)' }}>Ср. чек (год)</td>
-                {yearFact.map(yf => {
-                  const avg = yf.count > 0 ? yf.sum / yf.count : 0;
-                  return (
-                    <td key={yf.id} className="px-3 py-2 text-center italic">
-                      {avg > 0 ? avg.toLocaleString('ru-RU') + ' ₽' : '—'}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2 text-center italic">{totalYearAvg > 0 ? totalYearAvg.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SalesReport({ state, months, filterBranchIds, onExport }: {
-  state: StoreType['state'];
-  months: string[];
-  filterBranchIds: string[];
-  onExport: () => void;
-}) {
-  const [metric, setMetric] = useState<SalesTableMetric>('count');
-
-  const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
   const subItems = useMemo(() => state.subscriptionPlans.filter(p => bf(p.branchId)), [state.subscriptionPlans, filterBranchIds]);
   const addItems = useMemo(() => state.singleVisitPlans.filter(p => bf(p.branchId)), [state.singleVisitPlans, filterBranchIds]);
 
-  // Планы продаж по количеству: plansMap[month][itemId] = target
-  const salesPlansMap = useMemo(() => {
+  // fact[itemId][month] = {count, sum}
+  const factData = useMemo(() => {
+    const map: Record<string, Record<string, { count: number; sum: number }>> = {};
+    [...subItems, ...addItems].forEach(item => {
+      map[item.id] = {};
+      months.forEach(month => {
+        const salesType = subItems.find(s => s.id === item.id) ? 'subscription' : 'single';
+        const sales = state.sales.filter(s => s.type === salesType && s.itemId === item.id && inM(s.date, month) && bf(s.branchId));
+        map[item.id][month] = { count: sales.length, sum: sales.reduce((a, s) => a + s.finalPrice, 0) };
+      });
+    });
+    return map;
+  }, [subItems, addItems, months, state.sales, filterBranchIds]);
+
+  // plan[itemId][month] = target
+  const planData = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
+    [...subItems, ...addItems].forEach(item => { map[item.id] = {}; });
     months.forEach(month => {
-      map[month] = {};
       const plan = state.salesPlans.find(p => p.month === month && (filterBranchIds.length === 0 || filterBranchIds.includes(p.branchId)));
       if (plan) {
-        plan.items.forEach(item => { map[month][item.planId] = item.target; });
+        plan.items.forEach(pi => { if (map[pi.planId]) map[pi.planId][month] = pi.target; });
       }
     });
     return map;
-  }, [months, state.salesPlans, filterBranchIds]);
+  }, [subItems, addItems, months, state.salesPlans, filterBranchIds]);
 
-  const exportTable = (type: 'sub-plan' | 'sub-fact' | 'add-plan' | 'add-fact') => {
-    const isSub = type.startsWith('sub');
-    const isPlan = type.endsWith('plan');
-    const items = isSub ? subItems : addItems;
-    const salesType = isSub ? 'subscription' : 'single';
-    const inM = (date: string, month: string) => {
-      const [y, mo] = month.split('-').map(Number);
-      const d = new Date(date);
-      return d.getFullYear() === y && d.getMonth() + 1 === mo;
-    };
-    const header = ['Месяц', ...items.map(p => p.name), 'Итого'];
-    const rows: string[][] = [header];
-    months.forEach((month, i) => {
-      const row = [MONTH_NAMES[i]];
-      let total = 0;
-      items.forEach(item => {
-        let val = 0;
-        if (isPlan) {
-          val = salesPlansMap[month]?.[item.id] ?? 0;
-        } else {
-          const sales = state.sales.filter(s => s.type === salesType && s.itemId === item.id && inM(s.date, month) && bf(s.branchId));
-          val = metric === 'count' ? sales.length : sales.reduce((a, s) => a + s.finalPrice, 0);
-        }
-        total += val;
-        row.push(val > 0 ? String(val) : '');
-      });
-      row.push(String(total));
-      rows.push(row);
-    });
-    const suffix = isSub ? 'subscriptions' : 'single';
-    const typeSuffix = isPlan ? 'plan' : `fact-${metric}`;
-    onExport();
-    downloadCSV(`sales-${suffix}-${typeSuffix}-${state.currentBranchId}.csv`, rows);
+  const renderSalesBlock = (
+    title: string,
+    items: { id: string; name: string }[],
+    accentBg: string,
+  ) => {
+    if (items.length === 0) return (
+      <div>
+        <h3 className="text-base font-semibold mb-2">{title}</h3>
+        <p className="text-sm text-muted-foreground">Нет позиций для выбранных филиалов.</p>
+      </div>
+    );
+
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold">{title}</h3>
+          <button onClick={onExport} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className={`border-b border-border ${accentBg}`}>
+                  <th className={`text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 ${accentBg} min-w-[160px] z-10`}>Позиция</th>
+                  {months.map((_, i) => (
+                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px]">{MONTH_NAMES[i]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, ri) => {
+                  const yearCount = months.reduce((s, m) => s + (factData[item.id]?.[m]?.count ?? 0), 0);
+                  const yearSum = months.reduce((s, m) => s + (factData[item.id]?.[m]?.sum ?? 0), 0);
+                  return (
+                    <tr key={item.id} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                      <td className="px-4 py-1.5 font-medium sticky left-0 z-10 whitespace-nowrap"
+                        style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                        <div>{item.name}</div>
+                        {yearCount > 0 && (
+                          <div className="text-[10px] text-muted-foreground font-normal">
+                            за год: {yearCount} шт · {yearSum.toLocaleString('ru-RU')} ₽
+                          </div>
+                        )}
+                      </td>
+                      {months.map(month => {
+                        const f = factData[item.id]?.[month] ?? { count: 0, sum: 0 };
+                        const plan = planData[item.id]?.[month];
+                        const pct = plan && plan > 0 ? ((f.count - plan) / plan) * 100 : null;
+                        return (
+                          <td key={month} className="px-2 py-1.5 text-center">
+                            <div className="font-medium">{f.count > 0 ? f.count : '—'}</div>
+                            {plan !== undefined && plan > 0 && (
+                              <div className="text-[10px] text-blue-600">пл: {plan}</div>
+                            )}
+                            {pct !== null && (
+                              <div className={`text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {/* Итого кол-во за месяц */}
+                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого шт.</td>
+                  {months.map(month => {
+                    const total = items.reduce((s, item) => s + (factData[item.id]?.[month]?.count ?? 0), 0);
+                    const planTotal = items.reduce((s, item) => s + (planData[item.id]?.[month] ?? 0), 0);
+                    const pct = planTotal > 0 ? ((total - planTotal) / planTotal) * 100 : null;
+                    return (
+                      <td key={month} className="px-2 py-2 text-center">
+                        <div>{total > 0 ? total : '—'}</div>
+                        {planTotal > 0 && <div className="text-[10px] text-blue-600">пл: {planTotal}</div>}
+                        {pct !== null && (
+                          <div className={`text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {/* Средний чек за месяц */}
+                <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground italic">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-xs" style={{ background: 'rgb(250 250 250)' }}>Ср. чек</td>
+                  {months.map(month => {
+                    const totalCount = items.reduce((s, item) => s + (factData[item.id]?.[month]?.count ?? 0), 0);
+                    const totalSum = items.reduce((s, item) => s + (factData[item.id]?.[month]?.sum ?? 0), 0);
+                    const avg = totalCount > 0 ? Math.round(totalSum / totalCount) : 0;
+                    return (
+                      <td key={month} className="px-2 py-2 text-center text-xs">
+                        {avg > 0 ? avg.toLocaleString('ru-RU') + ' ₽' : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="pt-4 border-t border-border space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <h2 className="text-lg font-semibold">Продажи</h2>
-        <div className="flex gap-1 bg-secondary rounded-lg p-1">
-          {([['count', 'Количество'], ['sum', 'Сумма']] as [SalesTableMetric, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => setMetric(key)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${metric === key ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">Средний чек — в последней строке каждой таблицы</p>
-      </div>
-
-      <SalesTable title="Абонементы — план (количество)" headerBg="bg-blue-50"
-        items={subItems} months={months} salesType="subscription" metric="count"
-        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
-        onExport={() => exportTable('sub-plan')} />
-
-      <SalesTable title={`Абонементы — факт (${metric === 'count' ? 'количество' : 'сумма'})`} headerBg="bg-secondary/50"
-        items={subItems} months={months} salesType="subscription" metric={metric}
-        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
-        onExport={() => exportTable('sub-fact')} />
-
-      <SalesTable title="Доп. продажи — план (количество)" headerBg="bg-blue-50"
-        items={addItems} months={months} salesType="single" metric="count"
-        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
-        onExport={() => exportTable('add-plan')} />
-
-      <SalesTable title={`Доп. продажи — факт (${metric === 'count' ? 'количество' : 'сумма'})`} headerBg="bg-secondary/50"
-        items={addItems} months={months} salesType="single" metric={metric}
-        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
-        onExport={() => exportTable('add-fact')} />
+      <h2 className="text-lg font-semibold">Продажи</h2>
+      {renderSalesBlock('Абонементы', subItems, 'bg-secondary/50')}
+      {renderSalesBlock('Доп. продажи', addItems, 'bg-secondary/50')}
     </div>
   );
 }
