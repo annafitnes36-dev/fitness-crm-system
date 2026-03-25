@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StoreType, TrainingCategory, Hall, Trainer, TrainingType, SubscriptionPlan, SingleVisitPlan, ExpenseCategory } from '@/store';
+import { useState, useEffect } from 'react';
+import { StoreType, TrainingCategory, Hall, Trainer, TrainingType, SubscriptionPlan, SingleVisitPlan, ExpenseCategory, MonthlyPlanRow } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'planning';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -40,6 +40,156 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   );
 }
 
+const PLANNING_COLUMNS: { key: keyof MonthlyPlanRow; label: string; hint?: string }[] = [
+  { key: 'revenue', label: 'Выручка, ₽' },
+  { key: 'expenses', label: 'Расход, ₽' },
+  { key: 'profit', label: 'Прибыль, ₽' },
+  { key: 'additionalSales', label: 'Доп. продажи, ₽' },
+  { key: 'subscriptionSales', label: 'Сумма абонементов, ₽' },
+  { key: 'avgCheck', label: 'Средний чек, ₽' },
+  { key: 'inquiries', label: 'Обращений' },
+  { key: 'newbieEnrollments', label: 'Записей новичков' },
+  { key: 'newbieAttended', label: 'Дошло новичков' },
+  { key: 'newbieSales', label: 'Продаж новичкам' },
+  { key: 'convInquiryToEnroll', label: 'Конв. обращение→запись, %' },
+  { key: 'convEnrollToAttend', label: 'Конв. запись→приход, %' },
+  { key: 'convAttendToSale', label: 'Конв. приход→продажа, %' },
+  { key: 'totalSubscriptionSales', label: 'Всего продаж абон.' },
+  { key: 'renewalPotential', label: 'Потенциал продлений' },
+  { key: 'renewals', label: 'Продлений' },
+  { key: 'convRenewal', label: 'Конв. продления, %' },
+  { key: 'returns', label: 'Возвращений' },
+  { key: 'profitability', label: 'Рентабельность, %' },
+];
+
+const MONTH_NAMES_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+interface PlanningTabProps {
+  state: StoreType['state'];
+  setMonthlyPlan: (branchId: string, month: string, plan: Partial<MonthlyPlanRow>) => void;
+}
+
+function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedBranchId, setSelectedBranchId] = useState(state.currentBranchId);
+
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    return `${selectedYear}-${String(m).padStart(2, '0')}`;
+  });
+
+  // Локальное состояние значений для редактирования
+  const [values, setValues] = useState<Record<string, Record<keyof MonthlyPlanRow, string>>>({});
+
+  // Инициализируем значения из store при смене года/филиала
+  useEffect(() => {
+    const initial: Record<string, Record<keyof MonthlyPlanRow, string>> = {};
+    months.forEach(month => {
+      const plan = state.monthlyPlans.find(p => p.branchId === selectedBranchId && p.month === month);
+      const row: Partial<Record<keyof MonthlyPlanRow, string>> = {};
+      PLANNING_COLUMNS.forEach(col => {
+        const v = plan?.plan?.[col.key];
+        row[col.key] = v !== undefined ? String(v) : '';
+      });
+      initial[month] = row as Record<keyof MonthlyPlanRow, string>;
+    });
+    setValues(initial);
+  }, [selectedYear, selectedBranchId, state.monthlyPlans]);
+
+  const handleChange = (month: string, key: keyof MonthlyPlanRow, val: string) => {
+    setValues(prev => ({
+      ...prev,
+      [month]: { ...prev[month], [key]: val },
+    }));
+  };
+
+  const handleSaveMonth = (month: string) => {
+    const row = values[month] || {};
+    const plan: Partial<MonthlyPlanRow> = {};
+    PLANNING_COLUMNS.forEach(col => {
+      const v = row[col.key];
+      if (v !== '' && v !== undefined) {
+        (plan as Record<string, number>)[col.key] = parseFloat(v) || 0;
+      }
+    });
+    setMonthlyPlan(selectedBranchId, month, plan);
+  };
+
+  const handleSaveAll = () => {
+    months.forEach(month => handleSaveMonth(month));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Год</label>
+          <select className="border border-input rounded-lg px-3 py-2 text-sm" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+            {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Филиал</label>
+          <select className="border border-input rounded-lg px-3 py-2 text-sm" value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}>
+            {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+        <div className="flex items-end">
+          <Button onClick={handleSaveAll} className="bg-foreground text-primary-foreground hover:opacity-90">
+            <Icon name="Save" size={14} className="mr-1.5" />
+            Сохранить всё
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-secondary/50">
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[200px] z-10">Показатель</th>
+                {months.map((month, i) => (
+                  <th key={month} className="px-2 py-3 font-medium text-center min-w-[90px]">{MONTH_NAMES_SHORT[i]}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PLANNING_COLUMNS.map((col, ci) => (
+                <tr key={col.key} className={`border-b border-border/50 ${ci % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                  <td className="px-4 py-1.5 font-medium sticky left-0 z-10 text-muted-foreground text-xs"
+                    style={{ background: ci % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                    {col.label}
+                  </td>
+                  {months.map(month => (
+                    <td key={month} className="px-2 py-1">
+                      <input
+                        type="number"
+                        className="w-full border border-input rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-foreground/30"
+                        value={values[month]?.[col.key] ?? ''}
+                        onChange={e => handleChange(month, col.key, e.target.value)}
+                        placeholder="—"
+                        min={0}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-3 border-t border-border flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">Изменения применяются после нажатия «Сохранить»</span>
+          <Button onClick={handleSaveAll} size="sm" className="bg-foreground text-primary-foreground hover:opacity-90">
+            <Icon name="Save" size={13} className="mr-1" />
+            Сохранить всё
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings({ store }: SettingsProps) {
   const {
     state,
@@ -52,6 +202,7 @@ export default function Settings({ store }: SettingsProps) {
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
+    setMonthlyPlan,
   } = store;
 
   const [tab, setTab] = useState<Tab>('trainings');
@@ -101,6 +252,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'single', label: 'Разовые', icon: 'Ticket' },
     { id: 'sources', label: 'Источники', icon: 'Megaphone' },
     { id: 'expense-cats', label: 'Расходы', icon: 'TrendingDown' },
+    { id: 'planning', label: 'Планирование', icon: 'Target' },
   ];
 
   const toggleTT = (ids: string[], id: string, setter: (v: string[]) => void) => {
@@ -466,6 +618,11 @@ export default function Settings({ store }: SettingsProps) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Планирование */}
+      {tab === 'planning' && (
+        <PlanningTab state={state} setMonthlyPlan={setMonthlyPlan} />
       )}
 
       {/* Modals */}

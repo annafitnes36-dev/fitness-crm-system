@@ -162,6 +162,36 @@ export interface SalesPlan {
   items: SalesPlanItem[];
 }
 
+// Плановые значения для отчёта план/факт (по месяцу и филиалу)
+export interface MonthlyPlanRow {
+  revenue: number;
+  expenses: number;
+  profit: number;
+  additionalSales: number;
+  subscriptionSales: number;
+  avgCheck: number;
+  inquiries: number;
+  newbieEnrollments: number;
+  newbieAttended: number;
+  newbieSales: number;
+  convInquiryToEnroll: number;
+  convEnrollToAttend: number;
+  convAttendToSale: number;
+  totalSubscriptionSales: number;
+  renewalPotential: number;
+  renewals: number;
+  convRenewal: number;
+  returns: number;
+  profitability: number;
+}
+
+export interface MonthlyPlan {
+  id: string;
+  branchId: string;
+  month: string; // YYYY-MM
+  plan: Partial<MonthlyPlanRow>;
+}
+
 export type StaffRole = 'director' | 'manager' | 'admin' | 'trainer' | 'marketer';
 
 export interface Permission {
@@ -374,6 +404,7 @@ export interface AppState {
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
   salesPlans: SalesPlan[];
+  monthlyPlans: MonthlyPlan[];
   staff: StaffMember[];
   currentStaffId: string;
   contactChannels: string[];
@@ -416,6 +447,7 @@ const initialState: AppState = {
   expenseCategories: defaultExpenseCategories,
   expenses: defaultExpenses,
   salesPlans: [],
+  monthlyPlans: [],
   staff: defaultStaff,
   currentStaffId: 'st1',
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
@@ -586,6 +618,17 @@ export function useStore() {
     update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
   };
 
+  // Monthly Plans (план/факт)
+  const setMonthlyPlan = (branchId: string, month: string, plan: Partial<MonthlyPlanRow>) => {
+    update(s => {
+      const existing = s.monthlyPlans.find(p => p.branchId === branchId && p.month === month);
+      if (existing) {
+        return { ...s, monthlyPlans: s.monthlyPlans.map(p => p.branchId === branchId && p.month === month ? { ...p, plan } : p) };
+      }
+      return { ...s, monthlyPlans: [...s.monthlyPlans, { id: genId(), branchId, month, plan }] };
+    });
+  };
+
   // Sales Plans
   const setSalesPlan = (branchId: string, month: string, items: SalesPlanItem[]) => {
     update(s => {
@@ -726,7 +769,7 @@ export function useStore() {
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
-    setSalesPlan,
+    setSalesPlan, setMonthlyPlan,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
   };

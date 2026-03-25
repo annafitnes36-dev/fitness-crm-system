@@ -14,6 +14,7 @@ import Finance from '@/pages/Finance';
 import Branches from '@/pages/Branches';
 import Staff from '@/pages/Staff';
 import Settings from '@/pages/Settings';
+import Reports from '@/pages/Reports';
 
 export default function App() {
   const store = useStore();
@@ -31,6 +32,7 @@ export default function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'director-dashboard': return <DirectorDashboard store={store} />;
+      case 'reports': return <Reports store={store} />;
       case 'dashboard': return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
       case 'clients': return <Clients store={store} onSell={handleSell} />;
       case 'schedule': return <Schedule store={store} onSell={handleSell} />;

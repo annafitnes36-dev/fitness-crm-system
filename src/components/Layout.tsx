@@ -14,6 +14,7 @@ interface LayoutProps {
 
 const navItems = [
   { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp' },
+  { id: 'reports', label: 'Отчёты', icon: 'FileBarChart2' },
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard' },
   { id: 'clients', label: 'Клиенты', icon: 'Users' },
   { id: 'schedule', label: 'Расписание', icon: 'Calendar' },
