@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StoreType } from '@/store';
+import { StoreType, Branch } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,16 +10,45 @@ interface BranchesProps {
   store: StoreType;
 }
 
-export default function Branches({ store }: BranchesProps) {
-  const { state, addBranch, setCurrentBranch } = store;
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', address: '', phone: '' });
+const emptyForm = { name: '', address: '', phone: '' };
 
-  const handleAdd = () => {
+export default function Branches({ store }: BranchesProps) {
+  const { state, addBranch, updateBranch, removeBranch, setCurrentBranch } = store;
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowModal(true);
+  };
+
+  const openEdit = (branch: Branch) => {
+    setEditingId(branch.id);
+    setForm({ name: branch.name, address: branch.address, phone: branch.phone });
+    setShowModal(true);
+  };
+
+  const handleSave = () => {
     if (!form.name) return;
-    addBranch(form);
-    setShowAdd(false);
-    setForm({ name: '', address: '', phone: '' });
+    if (editingId) {
+      updateBranch(editingId, form);
+    } else {
+      addBranch(form);
+    }
+    setShowModal(false);
+  };
+
+  const handleDelete = (id: string) => {
+    if (state.branches.length <= 1) return;
+    removeBranch(id);
+    if (state.currentBranchId === id) {
+      const remaining = state.branches.find(b => b.id !== id);
+      if (remaining) setCurrentBranch(remaining.id);
+    }
+    setDeleteConfirmId(null);
   };
 
   return (
@@ -29,7 +58,7 @@ export default function Branches({ store }: BranchesProps) {
           <h2 className="text-lg font-semibold">Филиалы</h2>
           <p className="text-sm text-muted-foreground">Управление сетью студий</p>
         </div>
-        <Button onClick={() => setShowAdd(true)} className="bg-foreground text-primary-foreground hover:opacity-90">
+        <Button onClick={openAdd} className="bg-foreground text-primary-foreground hover:opacity-90">
           <Icon name="Plus" size={15} className="mr-1.5" /> Добавить филиал
         </Button>
       </div>
@@ -59,14 +88,30 @@ export default function Branches({ store }: BranchesProps) {
                     {isCurrent && <span className="text-xs text-green-600 font-medium">Текущий</span>}
                   </div>
                 </div>
-                {!isCurrent && (
+                <div className="flex items-center gap-1">
+                  {!isCurrent && (
+                    <button
+                      onClick={() => setCurrentBranch(branch.id)}
+                      className="text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors"
+                    >
+                      Переключить
+                    </button>
+                  )}
                   <button
-                    onClick={() => setCurrentBranch(branch.id)}
-                    className="text-xs text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-secondary transition-colors"
+                    onClick={() => openEdit(branch)}
+                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Переключить
+                    <Icon name="Pencil" size={14} />
                   </button>
-                )}
+                  {state.branches.length > 1 && (
+                    <button
+                      onClick={() => setDeleteConfirmId(branch.id)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                    >
+                      <Icon name="Trash2" size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2 text-sm">
@@ -99,9 +144,12 @@ export default function Branches({ store }: BranchesProps) {
         })}
       </div>
 
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+      {/* Add/Edit modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Новый филиал</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Редактировать филиал' : 'Новый филиал'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Название *</Label>
@@ -115,12 +163,30 @@ export default function Branches({ store }: BranchesProps) {
               <Label className="text-xs text-muted-foreground mb-1 block">Телефон</Label>
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+7 (999) 000-00-00" />
             </div>
-            <Button onClick={handleAdd} disabled={!form.name} className="w-full bg-foreground text-primary-foreground">
-              Создать филиал
+            <Button onClick={handleSave} disabled={!form.name} className="w-full bg-foreground text-primary-foreground">
+              {editingId ? 'Сохранить' : 'Создать филиал'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirm modal */}
+      {deleteConfirmId && (
+        <Dialog open={true} onOpenChange={() => setDeleteConfirmId(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Удалить филиал?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Филиал «{state.branches.find(b => b.id === deleteConfirmId)?.name}» будет удалён. Данные клиентов, расписания и продаж этого филиала останутся в системе.
+            </p>
+            <div className="flex gap-3 mt-2">
+              <Button variant="outline" onClick={() => setDeleteConfirmId(null)} className="flex-1">Отмена</Button>
+              <Button onClick={() => handleDelete(deleteConfirmId)} className="flex-1 bg-red-600 text-white hover:bg-red-700">Удалить</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

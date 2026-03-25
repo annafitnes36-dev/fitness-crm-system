@@ -15,6 +15,7 @@ import Branches from '@/pages/Branches';
 import Staff from '@/pages/Staff';
 import Settings from '@/pages/Settings';
 import Reports from '@/pages/Reports';
+import Login from '@/pages/Login';
 
 export default function App() {
   const store = useStore();
@@ -23,11 +24,25 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const handleLogin = (staffId: string) => {
+    store.setCurrentStaff(staffId);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+  };
 
   const handleSell = (clientId?: string) => {
     setSellClientId(clientId);
     setShowSell(true);
   };
+
+  if (!isAuthenticated) {
+    return <Login store={store} onLogin={handleLogin} />;
+  }
 
   const renderPage = () => {
     switch (activePage) {
@@ -48,7 +63,15 @@ export default function App() {
 
   return (
     <>
-      <Layout activePage={activePage} onNavigate={setActivePage} store={store} onSell={() => handleSell()} onInquiry={() => setShowInquiry(true)} onExpense={() => setShowExpense(true)}>
+      <Layout
+        activePage={activePage}
+        onNavigate={setActivePage}
+        store={store}
+        onSell={() => handleSell()}
+        onInquiry={() => setShowInquiry(true)}
+        onExpense={() => setShowExpense(true)}
+        onLogout={handleLogout}
+      >
         {renderPage()}
       </Layout>
       <SellModal

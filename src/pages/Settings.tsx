@@ -136,10 +136,13 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                   {items.map(item => (
                     <th key={item.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">{item.name}</th>
                   ))}
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[90px] text-muted-foreground">Итого</th>
                 </tr>
               </thead>
               <tbody>
-                {months.map((month, i) => (
+                {months.map((month, i) => {
+                  const monthTotal = items.reduce((sum, item) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
+                  return (
                   <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
                     <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
                       style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
@@ -155,8 +158,12 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                         />
                       </td>
                     ))}
+                    <td className="px-2 py-2 text-center font-semibold text-sm text-muted-foreground">
+                      {monthTotal > 0 ? monthTotal : '—'}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {/* Итого по каждой позиции */}
                 <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                   <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
@@ -171,6 +178,9 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                       </td>
                     );
                   })}
+                  <td className="px-2 py-2 text-center font-semibold">
+                    {months.reduce((s, m) => s + items.reduce((ss, it) => ss + (parseInt(values[m]?.[it.id] ?? '0') || 0), 0), 0) || '—'}
+                  </td>
                 </tr>
                 {/* Средний в месяц */}
                 <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground italic text-xs">
@@ -185,6 +195,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                       </td>
                     );
                   })}
+                  <td className="px-2 py-2 text-center">—</td>
                 </tr>
               </tbody>
             </table>

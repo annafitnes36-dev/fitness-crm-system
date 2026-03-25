@@ -224,6 +224,18 @@ export interface Permission {
   manageStaff: boolean;                // Управление сотрудниками
   manageSettings: boolean;             // Настройки системы (залы, источники)
   manageSalesPlan: boolean;            // Установка плана продаж
+  // Пункты меню
+  menuAnalytics: boolean;              // Аналитика
+  menuReports: boolean;                // Отчёты
+  menuDashboard: boolean;              // Дашборд
+  menuClients: boolean;                // Клиенты
+  menuSchedule: boolean;               // Расписание
+  menuSubscriptions: boolean;          // Абонементы
+  menuSales: boolean;                  // Продажи
+  menuFinance: boolean;                // Финансы
+  menuBranches: boolean;               // Филиалы
+  menuStaff: boolean;                  // Сотрудники
+  menuSettings: boolean;               // Настройки
 }
 
 export interface StaffMember {
@@ -236,6 +248,7 @@ export interface StaffMember {
   permissions: Permission;
   createdAt: string;
   password?: string;
+  login?: string;
 }
 
 export const ROLE_LABELS: Record<StaffRole, string> = {
@@ -246,6 +259,8 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
   marketer: 'Маркетолог',
 };
 
+const ALL_MENU = { menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: true, menuBranches: true, menuStaff: true, menuSettings: true };
+
 export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
   director: {
     viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: true,
@@ -253,6 +268,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: true, manageTrainings: true, manageSubscriptionPlans: true,
     manageStaff: true, manageSettings: true, manageSalesPlan: true,
+    ...ALL_MENU,
   },
   manager: {
     viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: true,
@@ -260,6 +276,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: true, manageTrainings: true, manageSubscriptionPlans: true,
     manageStaff: false, manageSettings: true, manageSalesPlan: true,
+    ...ALL_MENU,
   },
   admin: {
     viewDirectorDashboard: false, viewAdminDashboard: true, viewFinanceHistory: false,
@@ -267,6 +284,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
+    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   trainer: {
     viewDirectorDashboard: false, viewAdminDashboard: false, viewFinanceHistory: false,
@@ -274,6 +292,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
+    menuAnalytics: false, menuReports: false, menuDashboard: false, menuClients: false, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   marketer: {
     viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: false,
@@ -281,6 +300,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
+    menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
 };
 
@@ -427,16 +447,19 @@ const defaultStaff: StaffMember[] = [
     id: 'st1', name: 'Иванов Алексей Петрович', role: 'director', phone: '+7 (999) 100-00-01',
     email: 'director@fitcrm.ru', branchIds: ['b1', 'b2'],
     permissions: { ...DEFAULT_PERMISSIONS.director }, createdAt: fmt(addDays(today, -365)),
+    login: 'director', password: '1234',
   },
   {
     id: 'st2', name: 'Петрова Светлана Николаевна', role: 'manager', phone: '+7 (999) 100-00-02',
     email: 'manager@fitcrm.ru', branchIds: ['b1'],
     permissions: { ...DEFAULT_PERMISSIONS.manager }, createdAt: fmt(addDays(today, -200)),
+    login: 'manager', password: '1234',
   },
   {
     id: 'st3', name: 'Козлова Анна Викторовна', role: 'admin', phone: '+7 (999) 100-00-03',
     email: 'admin@fitcrm.ru', branchIds: ['b1'],
     permissions: { ...DEFAULT_PERMISSIONS.admin }, createdAt: fmt(addDays(today, -100)),
+    login: 'admin', password: '1234',
   },
 ];
 

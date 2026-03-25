@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import Icon from '@/components/ui/icon';
-import { StoreType, ROLE_LABELS } from '@/store';
+import { StoreType, ROLE_LABELS, Permission } from '@/store';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,26 +9,32 @@ interface LayoutProps {
   onSell: () => void;
   onInquiry: () => void;
   onExpense: () => void;
+  onLogout?: () => void;
 }
 
-const navItems = [
-  { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp' },
-  { id: 'reports', label: 'Отчёты', icon: 'FileBarChart2' },
-  { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard' },
-  { id: 'clients', label: 'Клиенты', icon: 'Users' },
-  { id: 'schedule', label: 'Расписание', icon: 'Calendar' },
-  { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard' },
-  { id: 'sales', label: 'Продажи', icon: 'ShoppingBag' },
-  { id: 'finance', label: 'Финансы', icon: 'BarChart3' },
-  { id: 'branches', label: 'Филиалы', icon: 'Building2' },
-  { id: 'staff', label: 'Сотрудники', icon: 'UserCog' },
-  { id: 'settings', label: 'Настройки', icon: 'Settings' },
+const ALL_NAV_ITEMS = [
+  { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp', permKey: 'menuAnalytics' as keyof Permission },
+  { id: 'reports', label: 'Отчёты', icon: 'FileBarChart2', permKey: 'menuReports' as keyof Permission },
+  { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard', permKey: 'menuDashboard' as keyof Permission },
+  { id: 'clients', label: 'Клиенты', icon: 'Users', permKey: 'menuClients' as keyof Permission },
+  { id: 'schedule', label: 'Расписание', icon: 'Calendar', permKey: 'menuSchedule' as keyof Permission },
+  { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard', permKey: 'menuSubscriptions' as keyof Permission },
+  { id: 'sales', label: 'Продажи', icon: 'ShoppingBag', permKey: 'menuSales' as keyof Permission },
+  { id: 'finance', label: 'Финансы', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
+  { id: 'branches', label: 'Филиалы', icon: 'Building2', permKey: 'menuBranches' as keyof Permission },
+  { id: 'staff', label: 'Сотрудники', icon: 'UserCog', permKey: 'menuStaff' as keyof Permission },
+  { id: 'settings', label: 'Настройки', icon: 'Settings', permKey: 'menuSettings' as keyof Permission },
 ];
 
-export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense }: LayoutProps) {
-  const { state, setCurrentBranch, setCurrentStaff } = store;
+export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
+  const { state, setCurrentBranch } = store;
   const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
+  const perms = currentStaff?.permissions;
+
+  const navItems = perms
+    ? ALL_NAV_ITEMS.filter(item => perms[item.permKey] !== false)
+    : ALL_NAV_ITEMS;
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -101,13 +106,16 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
             <span>{currentBranch?.name}</span>
             <div className="flex items-center gap-2 bg-secondary rounded-lg px-2 py-1">
               <Icon name="User" size={13} />
-              <select value={state.currentStaffId} onChange={e => setCurrentStaff(e.target.value)}
-                className="bg-transparent text-xs font-medium text-foreground outline-none cursor-pointer max-w-36 truncate">
-                {state.staff.map(m => (
-                  <option key={m.id} value={m.id}>{m.name.split(' ').slice(0, 2).join(' ')} ({ROLE_LABELS[m.role]})</option>
-                ))}
-              </select>
+              <span className="text-xs font-medium text-foreground">
+                {currentStaff ? `${currentStaff.name.split(' ').slice(0, 2).join(' ')} (${ROLE_LABELS[currentStaff.role]})` : '—'}
+              </span>
             </div>
+            {onLogout && (
+              <button onClick={onLogout} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-secondary">
+                <Icon name="LogOut" size={13} />
+                Выйти
+              </button>
+            )}
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-6">

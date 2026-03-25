@@ -59,6 +59,24 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const missedMonth = monthVisits.filter(v => v.status === 'missed').length;
   const cancelledMonth = monthVisits.filter(v => v.status === 'cancelled').length;
 
+  // Записи на первую тренировку — клиенты, у которых нет посещений ДО начала периода
+  const allAttendedByClient: Record<string, string[]> = {};
+  state.visits.filter(v => v.status === 'attended').forEach(v => {
+    if (!allAttendedByClient[v.clientId]) allAttendedByClient[v.clientId] = [];
+    allAttendedByClient[v.clientId].push(v.date);
+  });
+  const firstEnrollments = new Set<string>();
+  state.visits.filter(v => {
+    if (!['attended', 'enrolled', 'missed'].includes(v.status)) return false;
+    if (!inPeriod(v.date)) return false;
+    const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
+    return entry ? entry.branchId === state.currentBranchId : false;
+  }).forEach(v => {
+    const prevVisits = (allAttendedByClient[v.clientId] || []).filter(d => d < periodFrom);
+    if (prevVisits.length === 0) firstEnrollments.add(v.clientId);
+  });
+  const firstEnrollmentsCount = firstEnrollments.size;
+
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
   const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
@@ -104,7 +122,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       {/* Key stats: в нужном порядке */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Обращений за месяц', value: totalInquiries, sub: `${monthInquiries} вх. + ${newClientsMonth} рег.`, icon: 'PhoneIncoming', color: 'text-violet-600' },
+          { label: 'Обращений', value: totalInquiries, sub: `записей на 1-ю тренировку: ${firstEnrollmentsCount}`, icon: 'PhoneIncoming', color: 'text-violet-600' },
           { label: 'Дошло новичков', value: attendedMonth > 0 ? newClientsMonth : newClientsMonth, sub: 'зарегистрировано в этом месяце', icon: 'UserRound', color: 'text-blue-500' },
           { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600' },
           { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground' },

@@ -177,15 +177,12 @@ function generateMonths(year: number): string[] {
   });
 }
 
-type ReportSection = 'planfact' | 'expenses' | 'sales-sub-plan' | 'sales-sub-fact' | 'sales-add-plan' | 'sales-add-fact';
+type ReportSection = 'planfact' | 'expenses' | 'sales';
 
 const REPORT_NAV: { id: ReportSection; label: string; icon: string }[] = [
   { id: 'planfact', label: 'План / Факт', icon: 'BarChart2' },
   { id: 'expenses', label: 'Расходы', icon: 'Receipt' },
-  { id: 'sales-sub-plan', label: 'Абонементы — план', icon: 'CreditCard' },
-  { id: 'sales-sub-fact', label: 'Абонементы — факт', icon: 'CreditCard' },
-  { id: 'sales-add-plan', label: 'Доп. продажи — план', icon: 'ShoppingBag' },
-  { id: 'sales-add-fact', label: 'Доп. продажи — факт', icon: 'ShoppingBag' },
+  { id: 'sales', label: 'Продажи', icon: 'ShoppingBag' },
 ];
 
 export default function Reports({ store }: ReportsProps) {
@@ -194,6 +191,9 @@ export default function Reports({ store }: ReportsProps) {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [filterBranchIds, setFilterBranchIds] = useState<string[]>([state.currentBranchId]);
   const [activeSection, setActiveSection] = useState<ReportSection>('planfact');
+  const [comments, setComments] = useState<Record<string, string>>({
+    planfact: '', expenses: '', sales: '',
+  });
 
   const months = generateMonths(selectedYear);
 
@@ -338,11 +338,18 @@ export default function Reports({ store }: ReportsProps) {
   };
 
   const exportAll = () => {
-    exportPlanFact('plan');
-    setTimeout(() => exportPlanFact('fact'), 300);
-    setTimeout(() => exportExpenses('plan'), 600);
-    setTimeout(() => exportExpenses('fact'), 900);
-    setTimeout(() => exportSales(), 1200);
+    const commentRows: string[][] = [
+      ['Раздел', 'Комментарий'],
+      ['План / Факт', comments.planfact || ''],
+      ['Расходы', comments.expenses || ''],
+      ['Продажи', comments.sales || ''],
+    ];
+    downloadCSV(`comments-${selectedYear}-${branchLabel}.csv`, commentRows);
+    setTimeout(() => exportPlanFact('plan'), 300);
+    setTimeout(() => exportPlanFact('fact'), 600);
+    setTimeout(() => exportExpenses('plan'), 900);
+    setTimeout(() => exportExpenses('fact'), 1200);
+    setTimeout(() => exportSales(), 1500);
   };
 
   return (
@@ -528,35 +535,55 @@ export default function Reports({ store }: ReportsProps) {
               Под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
             </p>
           </div>
+          <CommentBox value={comments.planfact} onChange={v => setComments(c => ({ ...c, planfact: v }))} />
         </div>
       )}
 
       {/* РАЗДЕЛ: РАСХОДЫ */}
       {activeSection === 'expenses' && (
-        <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds}
-          onExportPlan={() => exportExpenses('plan')} onExportFact={() => exportExpenses('fact')} />
+        <div className="space-y-4">
+          <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds}
+            onExportPlan={() => exportExpenses('plan')} onExportFact={() => exportExpenses('fact')} />
+          <CommentBox value={comments.expenses} onChange={v => setComments(c => ({ ...c, expenses: v }))} />
+        </div>
       )}
 
       {/* РАЗДЕЛ: ПРОДАЖИ (4 таблицы) */}
-      {(activeSection === 'sales-sub-plan' || activeSection === 'sales-sub-fact' || activeSection === 'sales-add-plan' || activeSection === 'sales-add-fact') && (
-        <SalesReport
-          state={state}
-          months={months}
-          filterBranchIds={filterBranchIds}
-          onExport={exportSales}
-          activeSection={activeSection}
-        />
+      {activeSection === 'sales' && (
+        <div className="space-y-6">
+          <SalesReport
+            state={state}
+            months={months}
+            filterBranchIds={filterBranchIds}
+            onExport={exportSales}
+          />
+          <CommentBox value={comments.sales} onChange={v => setComments(c => ({ ...c, sales: v }))} />
+        </div>
       )}
     </div>
   );
 }
 
-function SalesReport({ state, months, filterBranchIds, onExport, activeSection }: {
+function CommentBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="bg-white border border-border rounded-xl p-4">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-2">Комментарий к отчёту</label>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Добавьте заметки, выводы или пояснения к данному разделу..."
+        rows={3}
+        className="w-full text-sm border border-input rounded-lg px-3 py-2 resize-none outline-none focus:ring-1 focus:ring-ring"
+      />
+    </div>
+  );
+}
+
+function SalesReport({ state, months, filterBranchIds, onExport }: {
   state: StoreType['state'];
   months: string[];
   filterBranchIds: string[];
   onExport: () => void;
-  activeSection: ReportSection;
 }) {
   const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
   const inM = (date: string, month: string) => {
@@ -733,11 +760,14 @@ function SalesReport({ state, months, filterBranchIds, onExport, activeSection }
     );
   };
 
-  if (activeSection === 'sales-sub-plan') return renderPlanTable('Абонементы — план', subItems);
-  if (activeSection === 'sales-sub-fact') return renderFactTable('Абонементы — факт', subItems);
-  if (activeSection === 'sales-add-plan') return renderPlanTable('Доп. продажи — план', addItems);
-  if (activeSection === 'sales-add-fact') return renderFactTable('Доп. продажи — факт', addItems);
-  return null;
+  return (
+    <div className="space-y-8">
+      {renderPlanTable('Абонементы — план', subItems)}
+      {renderFactTable('Абонементы — факт', subItems)}
+      {renderPlanTable('Доп. продажи — план', addItems)}
+      {renderFactTable('Доп. продажи — факт', addItems)}
+    </div>
+  );
 }
 
 function ExpensesReport({ state, months, filterBranchIds, onExportPlan, onExportFact }: {

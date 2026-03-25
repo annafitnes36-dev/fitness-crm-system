@@ -33,6 +33,20 @@ const PERMISSION_GROUPS: { label: string; icon: string; keys: (keyof Permission)
   },
 ];
 
+const MENU_ITEMS: { key: keyof Permission; label: string; icon: string }[] = [
+  { key: 'menuAnalytics', label: 'Аналитика', icon: 'TrendingUp' },
+  { key: 'menuReports', label: 'Отчёты', icon: 'FileBarChart2' },
+  { key: 'menuDashboard', label: 'Дашборд', icon: 'LayoutDashboard' },
+  { key: 'menuClients', label: 'Клиенты', icon: 'Users' },
+  { key: 'menuSchedule', label: 'Расписание', icon: 'Calendar' },
+  { key: 'menuSubscriptions', label: 'Абонементы', icon: 'CreditCard' },
+  { key: 'menuSales', label: 'Продажи', icon: 'ShoppingBag' },
+  { key: 'menuFinance', label: 'Финансы', icon: 'BarChart3' },
+  { key: 'menuBranches', label: 'Филиалы', icon: 'Building2' },
+  { key: 'menuStaff', label: 'Сотрудники', icon: 'UserCog' },
+  { key: 'menuSettings', label: 'Настройки', icon: 'Settings' },
+];
+
 const PERMISSION_LABELS: Record<keyof Permission, string> = {
   viewDirectorDashboard: 'Дашборд директора/управляющего',
   viewAdminDashboard: 'Дашборд администратора',
@@ -51,6 +65,17 @@ const PERMISSION_LABELS: Record<keyof Permission, string> = {
   manageStaff: 'Управление сотрудниками',
   manageSettings: 'Настройки системы',
   manageSalesPlan: 'Установка плана продаж',
+  menuAnalytics: 'Аналитика',
+  menuReports: 'Отчёты',
+  menuDashboard: 'Дашборд',
+  menuClients: 'Клиенты',
+  menuSchedule: 'Расписание',
+  menuSubscriptions: 'Абонементы',
+  menuSales: 'Продажи',
+  menuFinance: 'Финансы',
+  menuBranches: 'Филиалы',
+  menuStaff: 'Сотрудники',
+  menuSettings: 'Настройки',
 };
 
 const ROLE_COLORS: Record<StaffRole, string> = {
@@ -63,7 +88,7 @@ const ROLE_COLORS: Record<StaffRole, string> = {
 
 const emptyForm = {
   name: '', role: 'admin' as StaffRole, phone: '', email: '',
-  branchIds: [] as string[], password: '',
+  branchIds: [] as string[], password: '', login: '',
 };
 
 export default function Staff({ store }: StaffProps) {
@@ -86,7 +111,7 @@ export default function Staff({ store }: StaffProps) {
 
   const openEdit = (m: StaffMember) => {
     setEditingId(m.id);
-    setForm({ name: m.name, role: m.role, phone: m.phone, email: m.email, branchIds: m.branchIds, password: '' });
+    setForm({ name: m.name, role: m.role, phone: m.phone, email: m.email, branchIds: m.branchIds, password: '', login: m.login || '' });
     setShowPassword(false);
     setShowModal(true);
   };
@@ -94,11 +119,11 @@ export default function Staff({ store }: StaffProps) {
   const handleSave = () => {
     if (!form.name || !form.role) return;
     if (editingId) {
-      const upd: Partial<StaffMember> = { name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds };
+      const upd: Partial<StaffMember> = { name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds, login: form.login || undefined };
       if (form.password) upd.password = form.password;
       updateStaff(editingId, upd);
     } else {
-      addStaff({ name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds, permissions: { ...DEFAULT_PERMISSIONS[form.role] }, ...(form.password ? { password: form.password } : {}) });
+      addStaff({ name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds, permissions: { ...DEFAULT_PERMISSIONS[form.role] }, ...(form.password ? { password: form.password } : {}), ...(form.login ? { login: form.login } : {}) });
     }
     setShowModal(false);
   };
@@ -118,7 +143,7 @@ export default function Staff({ store }: StaffProps) {
 
   const openPerms = (m: StaffMember) => {
     setEditPermsId(m.id);
-    setPermsForm({ ...m.permissions });
+    setPermsForm({ ...DEFAULT_PERMISSIONS[m.role], ...m.permissions });
   };
 
   const savePerms = () => {
@@ -235,6 +260,10 @@ export default function Staff({ store }: StaffProps) {
                 <Label className="text-xs text-muted-foreground mb-1 block">Email</Label>
                 <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="mail@example.com" />
               </div>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Логин для входа (если отличается от email)</Label>
+              <Input value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value }))} placeholder="ivanova" />
             </div>
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">
@@ -362,6 +391,28 @@ export default function Staff({ store }: StaffProps) {
                   </div>
                 </div>
               ))}
+
+              {/* Доступные пункты меню */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon name="Menu" size={15} className="text-muted-foreground" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Доступные пункты меню</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pl-5">
+                  {MENU_ITEMS.map(item => (
+                    <label key={item.key} className="flex items-center gap-2 cursor-pointer">
+                      <div
+                        onClick={() => setPermsForm(p => p ? { ...p, [item.key]: !p[item.key] } : p)}
+                        className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer shrink-0 ${permsForm[item.key] ? 'bg-emerald-500' : 'bg-secondary border border-border'}`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${permsForm[item.key] ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </div>
+                      <Icon name={item.icon} size={13} className="text-muted-foreground shrink-0" />
+                      <span className="text-sm">{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
             <Button onClick={savePerms} className="w-full mt-4 bg-foreground text-primary-foreground">
               Сохранить права
