@@ -177,11 +177,23 @@ function generateMonths(year: number): string[] {
   });
 }
 
+type ReportSection = 'planfact' | 'expenses' | 'sales-sub-plan' | 'sales-sub-fact' | 'sales-add-plan' | 'sales-add-fact';
+
+const REPORT_NAV: { id: ReportSection; label: string; icon: string }[] = [
+  { id: 'planfact', label: 'План / Факт', icon: 'BarChart2' },
+  { id: 'expenses', label: 'Расходы', icon: 'Receipt' },
+  { id: 'sales-sub-plan', label: 'Абонементы — план', icon: 'CreditCard' },
+  { id: 'sales-sub-fact', label: 'Абонементы — факт', icon: 'CreditCard' },
+  { id: 'sales-add-plan', label: 'Доп. продажи — план', icon: 'ShoppingBag' },
+  { id: 'sales-add-fact', label: 'Доп. продажи — факт', icon: 'ShoppingBag' },
+];
+
 export default function Reports({ store }: ReportsProps) {
   const { state } = store;
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [filterBranchIds, setFilterBranchIds] = useState<string[]>([state.currentBranchId]);
+  const [activeSection, setActiveSection] = useState<ReportSection>('planfact');
 
   const months = generateMonths(selectedYear);
 
@@ -335,7 +347,7 @@ export default function Reports({ store }: ReportsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Заголовок и фильтры */}
+      {/* Фильтры */}
       <div className="flex flex-wrap items-center gap-4">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Год</label>
@@ -365,172 +377,186 @@ export default function Reports({ store }: ReportsProps) {
             ))}
           </div>
         </div>
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="ml-auto">
           <button onClick={exportAll} className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
             <Icon name="Download" size={14} /> Выгрузить всё
           </button>
         </div>
       </div>
 
-      {/* Таблица ПЛАН */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">План / Факт — план</h2>
-          <button onClick={() => exportPlanFact('plan')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-            <Icon name="Download" size={12} /> CSV
+      {/* Навигация по отчётам */}
+      <div className="flex flex-wrap gap-2">
+        {REPORT_NAV.map(nav => (
+          <button
+            key={nav.id}
+            onClick={() => setActiveSection(nav.id)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+              activeSection === nav.id
+                ? 'bg-foreground text-primary-foreground border-foreground'
+                : 'bg-white text-foreground border-border hover:bg-secondary'
+            }`}
+          >
+            <Icon name={nav.icon} size={13} />
+            {nav.label}
           </button>
-        </div>
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-blue-50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[110px] z-10">
-                    Месяц
-                  </th>
-                  {COLUMNS.map(col => (
-                    <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {months.map((month, i) => (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES[i]}
-                    </td>
-                    {COLUMNS.map(col => {
-                      const planVal = plansMap[month]?.[col.key] as number | undefined;
-                      return (
-                        <td key={col.key} className="px-3 py-2 text-center text-blue-700">
-                          {planVal !== undefined ? fmt(planVal, col.format) : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-                {/* Итого за год */}
-                <tr className="border-t-2 border-border bg-blue-50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
-                  {COLUMNS.map(col => {
-                    const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
-                    const total = col.format === 'pct' || col.key === 'avgCheck'
-                      ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined)
-                      : vals.reduce((a, b) => a + b, 0);
-                    return (
-                      <td key={col.key} className="px-3 py-2 text-center text-blue-900">
-                        {total !== undefined && !isNaN(total) && total !== 0 ? fmt(total, col.format) : '—'}
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Таблица ФАКТ */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">План / Факт — факт</h2>
-          <button onClick={() => exportPlanFact('fact')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-            <Icon name="Download" size={12} /> CSV
-          </button>
-        </div>
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[110px] z-10">
-                    Месяц
-                  </th>
-                  {COLUMNS.map(col => (
-                    <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {months.map((month, i) => (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES[i]}
-                    </td>
-                    {COLUMNS.map(col => {
-                      const factVal = factsMap[month]?.[col.key] as number | undefined;
-                      const planVal = plansMap[month]?.[col.key] as number | undefined;
-                      const d = diff(factVal, planVal);
-                      return (
-                        <td key={col.key} className="px-3 py-2 text-center">
-                          <div className="font-medium">{fmt(factVal, col.format)}</div>
-                          {d !== null && (
-                            <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-                {/* Итого за год */}
-                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 bg-secondary/50 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                  {COLUMNS.map(col => {
-                    const factVals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
-                    const planVals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
-                    const factTotal = col.format === 'pct' || col.key === 'avgCheck'
-                      ? (factVals.length > 0 ? factVals.reduce((a, b) => a + b, 0) / factVals.length : 0)
-                      : factVals.reduce((a, b) => a + b, 0);
-                    const planTotal = col.format === 'pct' || col.key === 'avgCheck'
-                      ? (planVals.length > 0 ? planVals.reduce((a, b) => a + b, 0) / planVals.length : undefined)
-                      : planVals.reduce((a, b) => a + b, 0);
-                    const d = diff(factTotal, planTotal);
-                    return (
-                      <td key={col.key} className="px-3 py-2 text-center">
-                        <div>{fmt(factTotal, col.format)}</div>
-                        {d !== null && (
-                          <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
+      {/* РАЗДЕЛ: ПЛАН / ФАКТ */}
+      {activeSection === 'planfact' && (
+        <div className="space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">План / Факт — план</h2>
+              <button onClick={() => exportPlanFact('plan')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+                <Icon name="Download" size={12} /> CSV
+              </button>
+            </div>
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-blue-50">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[110px] z-10">Месяц</th>
+                      {COLUMNS.map(col => (
+                        <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">{col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {months.map((month, i) => (
+                      <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground" style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{MONTH_NAMES[i]}</td>
+                        {COLUMNS.map(col => {
+                          const planVal = plansMap[month]?.[col.key] as number | undefined;
+                          return (
+                            <td key={col.key} className="px-3 py-2 text-center text-blue-700">
+                              {planVal !== undefined ? fmt(planVal, col.format) : '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-border bg-blue-50 font-semibold">
+                      <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
+                      {COLUMNS.map(col => {
+                        const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+                        const total = col.format === 'pct' || col.key === 'avgCheck'
+                          ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined)
+                          : vals.reduce((a, b) => a + b, 0);
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-center text-blue-900">
+                            {total !== undefined && !isNaN(total) && total !== 0 ? fmt(total, col.format) : '—'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">План / Факт — факт</h2>
+              <button onClick={() => exportPlanFact('fact')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+                <Icon name="Download" size={12} /> CSV
+              </button>
+            </div>
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[110px] z-10">Месяц</th>
+                      {COLUMNS.map(col => (
+                        <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">{col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {months.map((month, i) => (
+                      <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground" style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{MONTH_NAMES[i]}</td>
+                        {COLUMNS.map(col => {
+                          const factVal = factsMap[month]?.[col.key] as number | undefined;
+                          const planVal = plansMap[month]?.[col.key] as number | undefined;
+                          const d = diff(factVal, planVal);
+                          return (
+                            <td key={col.key} className="px-3 py-2 text-center">
+                              <div className="font-medium">{fmt(factVal, col.format)}</div>
+                              {d !== null && (
+                                <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                      <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                      {COLUMNS.map(col => {
+                        const factVals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
+                        const planVals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+                        const factTotal = col.format === 'pct' || col.key === 'avgCheck'
+                          ? (factVals.length > 0 ? factVals.reduce((a, b) => a + b, 0) / factVals.length : 0)
+                          : factVals.reduce((a, b) => a + b, 0);
+                        const planTotal = col.format === 'pct' || col.key === 'avgCheck'
+                          ? (planVals.length > 0 ? planVals.reduce((a, b) => a + b, 0) / planVals.length : undefined)
+                          : planVals.reduce((a, b) => a + b, 0);
+                        const d = diff(factTotal, planTotal);
+                        return (
+                          <td key={col.key} className="px-3 py-2 text-center">
+                            <div>{fmt(factTotal, col.format)}</div>
+                            {d !== null && (
+                              <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
+            </p>
           </div>
         </div>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        В таблице «Факт» под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
-        Плановые значения задаются в «Настройки» → «Планирование».
-      </p>
+      )}
 
       {/* РАЗДЕЛ: РАСХОДЫ */}
-      <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds}
-        onExportPlan={() => exportExpenses('plan')} onExportFact={() => exportExpenses('fact')} />
+      {activeSection === 'expenses' && (
+        <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds}
+          onExportPlan={() => exportExpenses('plan')} onExportFact={() => exportExpenses('fact')} />
+      )}
 
-      {/* РАЗДЕЛ: ПРОДАЖИ */}
-      <SalesReport state={state} months={months} filterBranchIds={filterBranchIds} onExport={exportSales} />
+      {/* РАЗДЕЛ: ПРОДАЖИ (4 таблицы) */}
+      {(activeSection === 'sales-sub-plan' || activeSection === 'sales-sub-fact' || activeSection === 'sales-add-plan' || activeSection === 'sales-add-fact') && (
+        <SalesReport
+          state={state}
+          months={months}
+          filterBranchIds={filterBranchIds}
+          onExport={exportSales}
+          activeSection={activeSection}
+        />
+      )}
     </div>
   );
 }
 
-function SalesReport({ state, months, filterBranchIds, onExport }: {
+function SalesReport({ state, months, filterBranchIds, onExport, activeSection }: {
   state: StoreType['state'];
   months: string[];
   filterBranchIds: string[];
   onExport: () => void;
+  activeSection: ReportSection;
 }) {
   const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
   const inM = (date: string, month: string) => {
@@ -542,7 +568,6 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
   const subItems = useMemo(() => state.subscriptionPlans.filter(p => bf(p.branchId)), [state.subscriptionPlans, filterBranchIds]);
   const addItems = useMemo(() => state.singleVisitPlans.filter(p => bf(p.branchId)), [state.singleVisitPlans, filterBranchIds]);
 
-  // fact[itemId][month] = {count, sum}
   const factData = useMemo(() => {
     const map: Record<string, Record<string, { count: number; sum: number }>> = {};
     [...subItems, ...addItems].forEach(item => {
@@ -556,7 +581,6 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
     return map;
   }, [subItems, addItems, months, state.sales, filterBranchIds]);
 
-  // plan[itemId][month] = target
   const planData = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
     [...subItems, ...addItems].forEach(item => { map[item.id] = {}; });
@@ -569,22 +593,12 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
     return map;
   }, [subItems, addItems, months, state.salesPlans, filterBranchIds]);
 
-  const renderSalesBlock = (
-    title: string,
-    items: { id: string; name: string }[],
-    accentBg: string,
-  ) => {
-    if (items.length === 0) return (
-      <div>
-        <h3 className="text-base font-semibold mb-2">{title}</h3>
-        <p className="text-sm text-muted-foreground">Нет позиций для выбранных филиалов.</p>
-      </div>
-    );
-
+  const renderPlanTable = (title: string, items: { id: string; name: string }[]) => {
+    if (items.length === 0) return <p className="text-sm text-muted-foreground">Нет позиций для выбранных филиалов.</p>;
     return (
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold">{title}</h3>
+          <h2 className="text-base font-semibold">{title}</h2>
           <button onClick={onExport} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
             <Icon name="Download" size={12} /> CSV
           </button>
@@ -593,11 +607,63 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className={`border-b border-border ${accentBg}`}>
-                  <th className={`text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 ${accentBg} min-w-[160px] z-10`}>Позиция</th>
-                  {months.map((_, i) => (
-                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px]">{MONTH_NAMES[i]}</th>
-                  ))}
+                <tr className="border-b border-border bg-blue-50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[160px] z-10">Позиция</th>
+                  {months.map((_, i) => <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px]">{MONTH_NAMES[i]}</th>)}
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px]">Итого год</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, ri) => {
+                  const yearPlan = months.reduce((s, m) => s + (planData[item.id]?.[m] ?? 0), 0);
+                  return (
+                    <tr key={item.id} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                      <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{item.name}</td>
+                      {months.map(month => {
+                        const plan = planData[item.id]?.[month];
+                        return (
+                          <td key={month} className="px-2 py-2 text-center text-blue-700 font-medium">
+                            {plan !== undefined && plan > 0 ? plan : '—'}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-center text-blue-900 font-semibold">{yearPlan > 0 ? yearPlan : '—'}</td>
+                    </tr>
+                  );
+                })}
+                <tr className="border-t-2 border-border bg-blue-50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 text-blue-900" style={{ background: 'rgb(239 246 255)' }}>Итого шт.</td>
+                  {months.map(month => {
+                    const total = items.reduce((s, item) => s + (planData[item.id]?.[month] ?? 0), 0);
+                    return <td key={month} className="px-2 py-2 text-center text-blue-900">{total > 0 ? total : '—'}</td>;
+                  })}
+                  <td className="px-2 py-2 text-center text-blue-900">{months.reduce((s, m) => s + items.reduce((ss, it) => ss + (planData[it.id]?.[m] ?? 0), 0), 0) || '—'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFactTable = (title: string, items: { id: string; name: string }[]) => {
+    if (items.length === 0) return <p className="text-sm text-muted-foreground">Нет позиций для выбранных филиалов.</p>;
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button onClick={onExport} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[160px] z-10">Позиция</th>
+                  {months.map((_, i) => <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[90px]">{MONTH_NAMES[i]}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -606,13 +672,10 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
                   const yearSum = months.reduce((s, m) => s + (factData[item.id]?.[m]?.sum ?? 0), 0);
                   return (
                     <tr key={item.id} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                      <td className="px-4 py-1.5 font-medium sticky left-0 z-10 whitespace-nowrap"
-                        style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      <td className="px-4 py-1.5 font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
                         <div>{item.name}</div>
                         {yearCount > 0 && (
-                          <div className="text-[10px] text-muted-foreground font-normal">
-                            за год: {yearCount} шт · {yearSum.toLocaleString('ru-RU')} ₽
-                          </div>
+                          <div className="text-[10px] text-muted-foreground font-normal">за год: {yearCount} шт · {yearSum.toLocaleString('ru-RU')} ₽</div>
                         )}
                       </td>
                       {months.map(month => {
@@ -622,9 +685,7 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
                         return (
                           <td key={month} className="px-2 py-1.5 text-center">
                             <div className="font-medium">{f.count > 0 ? f.count : '—'}</div>
-                            {plan !== undefined && plan > 0 && (
-                              <div className="text-[10px] text-blue-600">пл: {plan}</div>
-                            )}
+                            {plan !== undefined && plan > 0 && <div className="text-[10px] text-blue-600">пл: {plan}</div>}
                             {pct !== null && (
                               <div className={`text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                 {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
@@ -636,7 +697,6 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
                     </tr>
                   );
                 })}
-                {/* Итого кол-во за месяц */}
                 <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
                   <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого шт.</td>
                   {months.map(month => {
@@ -656,18 +716,13 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
                     );
                   })}
                 </tr>
-                {/* Средний чек за месяц */}
                 <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground italic">
                   <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-xs" style={{ background: 'rgb(250 250 250)' }}>Ср. чек</td>
                   {months.map(month => {
                     const totalCount = items.reduce((s, item) => s + (factData[item.id]?.[month]?.count ?? 0), 0);
                     const totalSum = items.reduce((s, item) => s + (factData[item.id]?.[month]?.sum ?? 0), 0);
                     const avg = totalCount > 0 ? Math.round(totalSum / totalCount) : 0;
-                    return (
-                      <td key={month} className="px-2 py-2 text-center text-xs">
-                        {avg > 0 ? avg.toLocaleString('ru-RU') + ' ₽' : '—'}
-                      </td>
-                    );
+                    return <td key={month} className="px-2 py-2 text-center text-xs">{avg > 0 ? avg.toLocaleString('ru-RU') + ' ₽' : '—'}</td>;
                   })}
                 </tr>
               </tbody>
@@ -678,13 +733,11 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
     );
   };
 
-  return (
-    <div className="pt-4 border-t border-border space-y-6">
-      <h2 className="text-lg font-semibold">Продажи</h2>
-      {renderSalesBlock('Абонементы', subItems, 'bg-secondary/50')}
-      {renderSalesBlock('Доп. продажи', addItems, 'bg-secondary/50')}
-    </div>
-  );
+  if (activeSection === 'sales-sub-plan') return renderPlanTable('Абонементы — план', subItems);
+  if (activeSection === 'sales-sub-fact') return renderFactTable('Абонементы — факт', subItems);
+  if (activeSection === 'sales-add-plan') return renderPlanTable('Доп. продажи — план', addItems);
+  if (activeSection === 'sales-add-fact') return renderFactTable('Доп. продажи — факт', addItems);
+  return null;
 }
 
 function ExpensesReport({ state, months, filterBranchIds, onExportPlan, onExportFact }: {

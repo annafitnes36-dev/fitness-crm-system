@@ -157,6 +157,35 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                     ))}
                   </tr>
                 ))}
+                {/* Итого по каждой позиции */}
+                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                  {items.map(item => {
+                    const total = months.reduce((sum, month) => {
+                      const v = parseInt(values[month]?.[item.id] ?? '0') || 0;
+                      return sum + v;
+                    }, 0);
+                    return (
+                      <td key={item.id} className="px-2 py-2 text-center text-sm font-semibold">
+                        {total > 0 ? total : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {/* Средний в месяц */}
+                <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground italic text-xs">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(250 250 250)' }}>Ср. в месяц</td>
+                  {items.map(item => {
+                    const filled = months.filter(month => parseInt(values[month]?.[item.id] ?? '0') > 0);
+                    const total = filled.reduce((sum, month) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
+                    const avg = filled.length > 0 ? Math.round(total / filled.length) : 0;
+                    return (
+                      <td key={item.id} className="px-2 py-2 text-center">
+                        {avg > 0 ? avg : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>

@@ -235,6 +235,7 @@ export interface StaffMember {
   branchIds: string[];
   permissions: Permission;
   createdAt: string;
+  password?: string;
 }
 
 export const ROLE_LABELS: Record<StaffRole, string> = {

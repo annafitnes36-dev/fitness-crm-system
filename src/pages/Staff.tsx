@@ -63,7 +63,7 @@ const ROLE_COLORS: Record<StaffRole, string> = {
 
 const emptyForm = {
   name: '', role: 'admin' as StaffRole, phone: '', email: '',
-  branchIds: [] as string[],
+  branchIds: [] as string[], password: '',
 };
 
 export default function Staff({ store }: StaffProps) {
@@ -71,8 +71,12 @@ export default function Staff({ store }: StaffProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [showPassword, setShowPassword] = useState(false);
   const [editPermsId, setEditPermsId] = useState<string | null>(null);
   const [permsForm, setPermsForm] = useState<Permission | null>(null);
+  const [passwordModalId, setPasswordModalId] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
+  const [showPwd, setShowPwd] = useState(false);
 
   const openAdd = () => {
     setEditingId(null);
@@ -82,18 +86,34 @@ export default function Staff({ store }: StaffProps) {
 
   const openEdit = (m: StaffMember) => {
     setEditingId(m.id);
-    setForm({ name: m.name, role: m.role, phone: m.phone, email: m.email, branchIds: m.branchIds });
+    setForm({ name: m.name, role: m.role, phone: m.phone, email: m.email, branchIds: m.branchIds, password: '' });
+    setShowPassword(false);
     setShowModal(true);
   };
 
   const handleSave = () => {
     if (!form.name || !form.role) return;
     if (editingId) {
-      updateStaff(editingId, { name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds });
+      const upd: Partial<StaffMember> = { name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds };
+      if (form.password) upd.password = form.password;
+      updateStaff(editingId, upd);
     } else {
-      addStaff({ name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds, permissions: { ...DEFAULT_PERMISSIONS[form.role] } });
+      addStaff({ name: form.name, role: form.role, phone: form.phone, email: form.email, branchIds: form.branchIds, permissions: { ...DEFAULT_PERMISSIONS[form.role] }, ...(form.password ? { password: form.password } : {}) });
     }
     setShowModal(false);
+  };
+
+  const openPasswordModal = (m: StaffMember) => {
+    setPasswordModalId(m.id);
+    setPasswordForm({ password: '', confirm: '' });
+    setShowPwd(false);
+  };
+
+  const savePassword = () => {
+    if (!passwordModalId || !passwordForm.password) return;
+    if (passwordForm.password !== passwordForm.confirm) return;
+    updateStaff(passwordModalId, { password: passwordForm.password });
+    setPasswordModalId(null);
   };
 
   const openPerms = (m: StaffMember) => {
@@ -137,6 +157,7 @@ export default function Staff({ store }: StaffProps) {
               <th>Роль</th>
               <th>Телефон</th>
               <th>Филиалы</th>
+              <th>Пароль</th>
               <th>Права</th>
               <th></th>
             </tr>
@@ -156,6 +177,12 @@ export default function Staff({ store }: StaffProps) {
                 <td className="text-muted-foreground">{m.phone}</td>
                 <td className="text-muted-foreground text-sm">
                   {m.branchIds.map(id => state.branches.find(b => b.id === id)?.name).filter(Boolean).join(', ')}
+                </td>
+                <td>
+                  <button onClick={() => openPasswordModal(m)} className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
+                    <Icon name="KeyRound" size={13} className="inline mr-1" />
+                    {m.password ? '●●●●' : 'Задать'}
+                  </button>
                 </td>
                 <td>
                   <button onClick={() => openPerms(m)} className="text-xs px-2 py-1 rounded-lg bg-secondary hover:bg-secondary/70 border border-border transition-colors">
@@ -210,6 +237,27 @@ export default function Staff({ store }: StaffProps) {
               </div>
             </div>
             <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">
+                {editingId ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль'}
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder={editingId ? 'Новый пароль...' : 'Пароль для входа'}
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <Icon name={showPassword ? 'EyeOff' : 'Eye'} size={15} />
+                </button>
+              </div>
+            </div>
+            <div>
               <Label className="text-xs text-muted-foreground mb-2 block">Доступные филиалы</Label>
               <div className="flex flex-wrap gap-2">
                 {state.branches.map(b => (
@@ -226,6 +274,53 @@ export default function Staff({ store }: StaffProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Password modal */}
+      {passwordModalId && (
+        <Dialog open={true} onOpenChange={() => setPasswordModalId(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Пароль — {state.staff.find(m => m.id === passwordModalId)?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Новый пароль</Label>
+                <div className="relative">
+                  <Input
+                    type={showPwd ? 'text' : 'password'}
+                    value={passwordForm.password}
+                    onChange={e => setPasswordForm(f => ({ ...f, password: e.target.value }))}
+                    placeholder="Введите пароль..."
+                    className="pr-9"
+                  />
+                  <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <Icon name={showPwd ? 'EyeOff' : 'Eye'} size={15} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Подтвердите пароль</Label>
+                <Input
+                  type={showPwd ? 'text' : 'password'}
+                  value={passwordForm.confirm}
+                  onChange={e => setPasswordForm(f => ({ ...f, confirm: e.target.value }))}
+                  placeholder="Повторите пароль..."
+                />
+                {passwordForm.confirm && passwordForm.password !== passwordForm.confirm && (
+                  <p className="text-xs text-red-500 mt-1">Пароли не совпадают</p>
+                )}
+              </div>
+              <Button
+                onClick={savePassword}
+                disabled={!passwordForm.password || passwordForm.password !== passwordForm.confirm}
+                className="w-full bg-foreground text-primary-foreground"
+              >
+                Сохранить пароль
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Permissions editor */}
       {editingMember && permsForm && (
