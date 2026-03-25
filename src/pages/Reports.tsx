@@ -275,6 +275,21 @@ export default function Reports({ store }: ReportsProps) {
                     })}
                   </tr>
                 ))}
+                {/* Итого за год */}
+                <tr className="border-t-2 border-border bg-blue-50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
+                  {COLUMNS.map(col => {
+                    const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+                    const total = col.format === 'pct' || col.key === 'avgCheck'
+                      ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined)
+                      : vals.reduce((a, b) => a + b, 0);
+                    return (
+                      <td key={col.key} className="px-3 py-2 text-center text-blue-900">
+                        {total !== undefined && !isNaN(total) && total !== 0 ? fmt(total, col.format) : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
@@ -323,6 +338,31 @@ export default function Reports({ store }: ReportsProps) {
                     })}
                   </tr>
                 ))}
+                {/* Итого за год */}
+                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 bg-secondary/50 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                  {COLUMNS.map(col => {
+                    const factVals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
+                    const planVals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+                    const factTotal = col.format === 'pct' || col.key === 'avgCheck'
+                      ? (factVals.length > 0 ? factVals.reduce((a, b) => a + b, 0) / factVals.length : 0)
+                      : factVals.reduce((a, b) => a + b, 0);
+                    const planTotal = col.format === 'pct' || col.key === 'avgCheck'
+                      ? (planVals.length > 0 ? planVals.reduce((a, b) => a + b, 0) / planVals.length : undefined)
+                      : planVals.reduce((a, b) => a + b, 0);
+                    const d = diff(factTotal, planTotal);
+                    return (
+                      <td key={col.key} className="px-3 py-2 text-center">
+                        <div>{fmt(factTotal, col.format)}</div>
+                        {d !== null && (
+                          <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>
@@ -336,6 +376,135 @@ export default function Reports({ store }: ReportsProps) {
 
       {/* РАЗДЕЛ: РАСХОДЫ */}
       <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds} />
+
+      {/* РАЗДЕЛ: ПРОДАЖИ */}
+      <SalesReport state={state} months={months} filterBranchIds={filterBranchIds} />
+    </div>
+  );
+}
+
+type SalesMetric = 'count' | 'avgCheck' | 'sum';
+
+function SalesReport({ state, months, filterBranchIds }: {
+  state: StoreType['state'];
+  months: string[];
+  filterBranchIds: string[];
+}) {
+  const [metric, setMetric] = useState<SalesMetric>('sum');
+
+  const salesData = useMemo(() => {
+    const result: Record<string, { subCount: number; subSum: number; addCount: number; addSum: number }> = {};
+    months.forEach(month => {
+      const [year, mon] = month.split('-').map(Number);
+      const inMonth = (date: string) => {
+        const d = new Date(date);
+        return d.getFullYear() === year && d.getMonth() + 1 === mon;
+      };
+      const branchFilter = (bId: string) => filterBranchIds.length === 0 || filterBranchIds.includes(bId);
+      const monthSales = state.sales.filter(s => inMonth(s.date) && branchFilter(s.branchId));
+      const subSales = monthSales.filter(s => s.type === 'subscription');
+      const addSales = monthSales.filter(s => s.type === 'single');
+      result[month] = {
+        subCount: subSales.length,
+        subSum: subSales.reduce((s, x) => s + x.finalPrice, 0),
+        addCount: addSales.length,
+        addSum: addSales.reduce((s, x) => s + x.finalPrice, 0),
+      };
+    });
+    return result;
+  }, [months, filterBranchIds, state.sales]);
+
+  const getValue = (month: string, type: 'sub' | 'add'): number => {
+    const d = salesData[month];
+    if (!d) return 0;
+    if (type === 'sub') {
+      if (metric === 'count') return d.subCount;
+      if (metric === 'avgCheck') return d.subCount > 0 ? d.subSum / d.subCount : 0;
+      return d.subSum;
+    } else {
+      if (metric === 'count') return d.addCount;
+      if (metric === 'avgCheck') return d.addCount > 0 ? d.addSum / d.addCount : 0;
+      return d.addSum;
+    }
+  };
+
+  const fmtVal = (val: number): string => {
+    if (val === 0) return '—';
+    if (metric === 'count') return String(Math.round(val));
+    return val.toLocaleString('ru-RU') + ' ₽';
+  };
+
+  const yearSub = {
+    count: months.reduce((s, m) => s + salesData[m].subCount, 0),
+    sum: months.reduce((s, m) => s + salesData[m].subSum, 0),
+  };
+  const yearAdd = {
+    count: months.reduce((s, m) => s + salesData[m].addCount, 0),
+    sum: months.reduce((s, m) => s + salesData[m].addSum, 0),
+  };
+  const yearSubVal = metric === 'count' ? yearSub.count : metric === 'avgCheck' ? (yearSub.count > 0 ? yearSub.sum / yearSub.count : 0) : yearSub.sum;
+  const yearAddVal = metric === 'count' ? yearAdd.count : metric === 'avgCheck' ? (yearAdd.count > 0 ? yearAdd.sum / yearAdd.count : 0) : yearAdd.sum;
+
+  return (
+    <div className="pt-4 border-t border-border space-y-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-lg font-semibold">Продажи</h2>
+        <div className="flex gap-1 bg-secondary rounded-lg p-1">
+          {([['sum', 'Сумма'], ['count', 'Количество'], ['avgCheck', 'Средний чек']] as [SalesMetric, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setMetric(key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${metric === key ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-secondary/50">
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
+                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Абонементы</th>
+                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Доп. продажи</th>
+                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Итого</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((month, i) => {
+                const subVal = getValue(month, 'sub');
+                const addVal = getValue(month, 'add');
+                const totalVal = metric === 'avgCheck'
+                  ? 0
+                  : (metric === 'count'
+                    ? salesData[month].subCount + salesData[month].addCount
+                    : salesData[month].subSum + salesData[month].addSum);
+                return (
+                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
+                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {MONTH_NAMES[i]}
+                    </td>
+                    <td className="px-3 py-2 text-center">{fmtVal(subVal)}</td>
+                    <td className="px-3 py-2 text-center">{fmtVal(addVal)}</td>
+                    <td className="px-3 py-2 text-center font-semibold">
+                      {metric === 'avgCheck' ? '—' : fmtVal(totalVal)}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                <td className="px-3 py-2 text-center">{fmtVal(yearSubVal)}</td>
+                <td className="px-3 py-2 text-center">{fmtVal(yearAddVal)}</td>
+                <td className="px-3 py-2 text-center">
+                  {metric === 'avgCheck' ? '—' : fmtVal(metric === 'count' ? yearSub.count + yearAdd.count : yearSub.sum + yearAdd.sum)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -435,6 +604,16 @@ function ExpensesReport({ state, months, filterBranchIds }: {
                     </tr>
                   );
                 })}
+                <tr className="border-t-2 border-border bg-blue-50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
+                  {branchCategories.map(cat => {
+                    const yearTotal = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
+                    return <td key={cat.id} className="px-3 py-2 text-center text-blue-900">{yearTotal > 0 ? fmtMoney(yearTotal) : '—'}</td>;
+                  })}
+                  <td className="px-3 py-2 text-center text-blue-900">
+                    {fmtMoney(months.reduce((s, m) => s + branchCategories.reduce((ss, cat) => ss + (planMap[m][cat.id] ?? 0), 0), 0))}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -484,6 +663,27 @@ function ExpensesReport({ state, months, filterBranchIds }: {
                     </tr>
                   );
                 })}
+                <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                  {branchCategories.map(cat => {
+                    const yearFact = months.reduce((s, m) => s + (factMap[m][cat.id] ?? 0), 0);
+                    const yearPlan = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
+                    const pct = yearPlan > 0 ? ((yearFact - yearPlan) / yearPlan) * 100 : null;
+                    return (
+                      <td key={cat.id} className="px-3 py-2 text-center">
+                        <span>{fmtMoney(yearFact)}</span>
+                        {pct !== null && (
+                          <span className={`ml-1 text-[10px] ${pct <= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 text-center">
+                    {fmtMoney(months.reduce((s, m) => s + branchCategories.reduce((ss, cat) => ss + (factMap[m][cat.id] ?? 0), 0), 0))}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
