@@ -273,25 +273,56 @@ export default function Reports({ store }: ReportsProps) {
   };
 
   const exportSales = () => {
-    const header = ['Месяц', 'Абонементы (кол-во)', 'Абонементы (сумма)', 'Абонементы (ср. чек)', 'Доп. продажи (кол-во)', 'Доп. продажи (сумма)', 'Доп. продажи (ср. чек)', 'Итого кол-во', 'Итого сумма'];
-    const rows: string[][] = [header];
+    const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
+    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+    const inM = (date: string, month: string) => {
+      const [y, mo] = month.split('-').map(Number);
+      const d = new Date(date);
+      return d.getFullYear() === y && d.getMonth() + 1 === mo;
+    };
+    // Абонементы
+    const subHeader = ['Месяц', ...subPlans.map(p => p.name + ' (кол-во)'), ...subPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма'];
+    const subRows: string[][] = [subHeader];
     months.forEach((month, i) => {
-      const [year, mon] = month.split('-').map(Number);
-      const inM = (d: string) => { const dt = new Date(d); return dt.getFullYear() === year && dt.getMonth() + 1 === mon; };
-      const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
-      const ms = state.sales.filter(s => inM(s.date) && bf(s.branchId));
-      const sub = ms.filter(s => s.type === 'subscription');
-      const add = ms.filter(s => s.type === 'single');
-      const subSum = sub.reduce((s, x) => s + x.finalPrice, 0);
-      const addSum = add.reduce((s, x) => s + x.finalPrice, 0);
-      rows.push([
-        MONTH_NAMES[i],
-        String(sub.length), String(subSum), String(sub.length > 0 ? Math.round(subSum / sub.length) : 0),
-        String(add.length), String(addSum), String(add.length > 0 ? Math.round(addSum / add.length) : 0),
-        String(sub.length + add.length), String(subSum + addSum),
-      ]);
+      const row = [MONTH_NAMES[i]];
+      let totalCnt = 0, totalSum = 0;
+      subPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        row.push(String(sales.length));
+        totalCnt += sales.length;
+      });
+      subPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        const sum = sales.reduce((s, x) => s + x.finalPrice, 0);
+        row.push(String(sum));
+        totalSum += sum;
+      });
+      row.push(String(totalCnt), String(totalSum));
+      subRows.push(row);
     });
-    downloadCSV(`sales-${selectedYear}-${branchLabel}.csv`, rows);
+    downloadCSV(`sales-subscriptions-${selectedYear}-${branchLabel}.csv`, subRows);
+    // Доп продажи
+    const addHeader = ['Месяц', ...addPlans.map(p => p.name + ' (кол-во)'), ...addPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма'];
+    const addRows: string[][] = [addHeader];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      let totalCnt = 0, totalSum = 0;
+      addPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        row.push(String(sales.length));
+        totalCnt += sales.length;
+      });
+      addPlans.forEach(plan => {
+        const sales = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId));
+        const sum = sales.reduce((s, x) => s + x.finalPrice, 0);
+        row.push(String(sum));
+        totalSum += sum;
+      });
+      row.push(String(totalCnt), String(totalSum));
+      addRows.push(row);
+    });
+    setTimeout(() => downloadCSV(`sales-single-${selectedYear}-${branchLabel}.csv`, addRows), 300);
   };
 
   const exportAll = () => {
@@ -495,7 +526,157 @@ export default function Reports({ store }: ReportsProps) {
   );
 }
 
-type SalesMetric = 'count' | 'avgCheck' | 'sum';
+type SalesTableMetric = 'count' | 'sum';
+
+function SalesTable({
+  title, headerBg, items, months, salesType, metric, state, filterBranchIds, plansMap, onExport,
+}: {
+  title: string; headerBg: string;
+  items: { id: string; name: string }[];
+  months: string[];
+  salesType: 'subscription' | 'single';
+  metric: SalesTableMetric;
+  state: StoreType['state'];
+  filterBranchIds: string[];
+  plansMap: Record<string, Record<string, number>>;
+  onExport: () => void;
+}) {
+  const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+  const inM = (date: string, month: string) => {
+    const [y, mo] = month.split('-').map(Number);
+    const d = new Date(date);
+    return d.getFullYear() === y && d.getMonth() + 1 === mo;
+  };
+
+  // fact[month][itemId] = {count, sum}
+  const factMap = useMemo(() => {
+    const map: Record<string, Record<string, { count: number; sum: number }>> = {};
+    months.forEach(month => {
+      map[month] = {};
+      items.forEach(item => {
+        const sales = state.sales.filter(s => s.type === salesType && s.itemId === item.id && inM(s.date, month) && bf(s.branchId));
+        map[month][item.id] = { count: sales.length, sum: sales.reduce((a, s) => a + s.finalPrice, 0) };
+      });
+    });
+    return map;
+  }, [months, items, state.sales, filterBranchIds]);
+
+  const getVal = (month: string, itemId: string): number => {
+    const f = factMap[month]?.[itemId];
+    if (!f) return 0;
+    return metric === 'count' ? f.count : f.sum;
+  };
+
+  const getPlan = (month: string, itemId: string): number | undefined =>
+    plansMap[month]?.[itemId];
+
+  const fmtV = (v: number) => metric === 'count' ? (v === 0 ? '—' : String(v)) : (v === 0 ? '—' : v.toLocaleString('ru-RU') + ' ₽');
+
+  // Итоги по столбцу (за год)
+  const yearFact = items.map(item => ({
+    id: item.id,
+    count: months.reduce((s, m) => s + (factMap[m]?.[item.id]?.count ?? 0), 0),
+    sum: months.reduce((s, m) => s + (factMap[m]?.[item.id]?.sum ?? 0), 0),
+  }));
+  const yearPlan = items.map(item => ({
+    id: item.id,
+    count: months.reduce((s, m) => s + (plansMap[m]?.[item.id] ?? 0), 0),
+  }));
+  const totalYearCount = yearFact.reduce((s, x) => s + x.count, 0);
+  const totalYearSum = yearFact.reduce((s, x) => s + x.sum, 0);
+  const totalYearAvg = totalYearCount > 0 ? totalYearSum / totalYearCount : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold">{title}</h3>
+        <button onClick={onExport} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+          <Icon name="Download" size={12} /> CSV
+        </button>
+      </div>
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className={`border-b border-border ${headerBg}`}>
+                <th className={`text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 ${headerBg} min-w-[110px] z-10`}>Месяц</th>
+                {items.map(item => (
+                  <th key={item.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[120px]">{item.name}</th>
+                ))}
+                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[100px]">Итого</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((month, i) => {
+                const rowTotal = items.reduce((s, item) => {
+                  const f = factMap[month]?.[item.id];
+                  return s + (metric === 'count' ? (f?.count ?? 0) : (f?.sum ?? 0));
+                }, 0);
+                return (
+                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
+                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {MONTH_NAMES[i]}
+                    </td>
+                    {items.map(item => {
+                      const val = getVal(month, item.id);
+                      const plan = metric === 'count' ? getPlan(month, item.id) : undefined;
+                      const pct = plan !== undefined && plan > 0 ? ((val - plan) / plan) * 100 : null;
+                      return (
+                        <td key={item.id} className="px-3 py-2 text-center">
+                          <span className="font-medium">{fmtV(val)}</span>
+                          {pct !== null && (
+                            <span className={`ml-1 text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center font-semibold">{fmtV(rowTotal)}</td>
+                  </tr>
+                );
+              })}
+              {/* Итого год */}
+              <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                {yearFact.map((yf, idx) => {
+                  const val = metric === 'count' ? yf.count : yf.sum;
+                  const planTotal = yearPlan[idx]?.count;
+                  const pct = metric === 'count' && planTotal && planTotal > 0 ? ((yf.count - planTotal) / planTotal) * 100 : null;
+                  return (
+                    <td key={yf.id} className="px-3 py-2 text-center">
+                      <span>{fmtV(val)}</span>
+                      {pct !== null && (
+                        <span className={`ml-1 text-[10px] ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-center">{fmtV(metric === 'count' ? totalYearCount : totalYearSum)}</td>
+              </tr>
+              {/* Средний чек */}
+              <tr className="border-t border-border/50 bg-secondary/30 text-muted-foreground">
+                <td className="px-4 py-2 sticky left-0 z-10 italic whitespace-nowrap" style={{ background: 'rgb(248 249 250)' }}>Ср. чек (год)</td>
+                {yearFact.map(yf => {
+                  const avg = yf.count > 0 ? yf.sum / yf.count : 0;
+                  return (
+                    <td key={yf.id} className="px-3 py-2 text-center italic">
+                      {avg > 0 ? avg.toLocaleString('ru-RU') + ' ₽' : '—'}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-center italic">{totalYearAvg > 0 ? totalYearAvg.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SalesReport({ state, months, filterBranchIds, onExport }: {
   state: StoreType['state'];
@@ -503,124 +684,94 @@ function SalesReport({ state, months, filterBranchIds, onExport }: {
   filterBranchIds: string[];
   onExport: () => void;
 }) {
-  const [metric, setMetric] = useState<SalesMetric>('sum');
+  const [metric, setMetric] = useState<SalesTableMetric>('count');
 
-  const salesData = useMemo(() => {
-    const result: Record<string, { subCount: number; subSum: number; addCount: number; addSum: number }> = {};
+  const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+  const subItems = useMemo(() => state.subscriptionPlans.filter(p => bf(p.branchId)), [state.subscriptionPlans, filterBranchIds]);
+  const addItems = useMemo(() => state.singleVisitPlans.filter(p => bf(p.branchId)), [state.singleVisitPlans, filterBranchIds]);
+
+  // Планы продаж по количеству: plansMap[month][itemId] = target
+  const salesPlansMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
     months.forEach(month => {
-      const [year, mon] = month.split('-').map(Number);
-      const inMonth = (date: string) => {
-        const d = new Date(date);
-        return d.getFullYear() === year && d.getMonth() + 1 === mon;
-      };
-      const branchFilter = (bId: string) => filterBranchIds.length === 0 || filterBranchIds.includes(bId);
-      const monthSales = state.sales.filter(s => inMonth(s.date) && branchFilter(s.branchId));
-      const subSales = monthSales.filter(s => s.type === 'subscription');
-      const addSales = monthSales.filter(s => s.type === 'single');
-      result[month] = {
-        subCount: subSales.length,
-        subSum: subSales.reduce((s, x) => s + x.finalPrice, 0),
-        addCount: addSales.length,
-        addSum: addSales.reduce((s, x) => s + x.finalPrice, 0),
-      };
+      map[month] = {};
+      const plan = state.salesPlans.find(p => p.month === month && (filterBranchIds.length === 0 || filterBranchIds.includes(p.branchId)));
+      if (plan) {
+        plan.items.forEach(item => { map[month][item.planId] = item.target; });
+      }
     });
-    return result;
-  }, [months, filterBranchIds, state.sales]);
+    return map;
+  }, [months, state.salesPlans, filterBranchIds]);
 
-  const getValue = (month: string, type: 'sub' | 'add'): number => {
-    const d = salesData[month];
-    if (!d) return 0;
-    if (type === 'sub') {
-      if (metric === 'count') return d.subCount;
-      if (metric === 'avgCheck') return d.subCount > 0 ? d.subSum / d.subCount : 0;
-      return d.subSum;
-    } else {
-      if (metric === 'count') return d.addCount;
-      if (metric === 'avgCheck') return d.addCount > 0 ? d.addSum / d.addCount : 0;
-      return d.addSum;
-    }
+  const exportTable = (type: 'sub-plan' | 'sub-fact' | 'add-plan' | 'add-fact') => {
+    const isSub = type.startsWith('sub');
+    const isPlan = type.endsWith('plan');
+    const items = isSub ? subItems : addItems;
+    const salesType = isSub ? 'subscription' : 'single';
+    const inM = (date: string, month: string) => {
+      const [y, mo] = month.split('-').map(Number);
+      const d = new Date(date);
+      return d.getFullYear() === y && d.getMonth() + 1 === mo;
+    };
+    const header = ['Месяц', ...items.map(p => p.name), 'Итого'];
+    const rows: string[][] = [header];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      let total = 0;
+      items.forEach(item => {
+        let val = 0;
+        if (isPlan) {
+          val = salesPlansMap[month]?.[item.id] ?? 0;
+        } else {
+          const sales = state.sales.filter(s => s.type === salesType && s.itemId === item.id && inM(s.date, month) && bf(s.branchId));
+          val = metric === 'count' ? sales.length : sales.reduce((a, s) => a + s.finalPrice, 0);
+        }
+        total += val;
+        row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(total));
+      rows.push(row);
+    });
+    const suffix = isSub ? 'subscriptions' : 'single';
+    const typeSuffix = isPlan ? 'plan' : `fact-${metric}`;
+    onExport();
+    downloadCSV(`sales-${suffix}-${typeSuffix}-${state.currentBranchId}.csv`, rows);
   };
-
-  const fmtVal = (val: number): string => {
-    if (val === 0) return '—';
-    if (metric === 'count') return String(Math.round(val));
-    return val.toLocaleString('ru-RU') + ' ₽';
-  };
-
-  const yearSub = {
-    count: months.reduce((s, m) => s + salesData[m].subCount, 0),
-    sum: months.reduce((s, m) => s + salesData[m].subSum, 0),
-  };
-  const yearAdd = {
-    count: months.reduce((s, m) => s + salesData[m].addCount, 0),
-    sum: months.reduce((s, m) => s + salesData[m].addSum, 0),
-  };
-  const yearSubVal = metric === 'count' ? yearSub.count : metric === 'avgCheck' ? (yearSub.count > 0 ? yearSub.sum / yearSub.count : 0) : yearSub.sum;
-  const yearAddVal = metric === 'count' ? yearAdd.count : metric === 'avgCheck' ? (yearAdd.count > 0 ? yearAdd.sum / yearAdd.count : 0) : yearAdd.sum;
 
   return (
-    <div className="pt-4 border-t border-border space-y-4">
+    <div className="pt-4 border-t border-border space-y-6">
       <div className="flex flex-wrap items-center gap-4">
         <h2 className="text-lg font-semibold">Продажи</h2>
         <div className="flex gap-1 bg-secondary rounded-lg p-1">
-          {([['sum', 'Сумма'], ['count', 'Количество'], ['avgCheck', 'Средний чек']] as [SalesMetric, string][]).map(([key, label]) => (
+          {([['count', 'Количество'], ['sum', 'Сумма']] as [SalesTableMetric, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setMetric(key)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${metric === key ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
               {label}
             </button>
           ))}
         </div>
-        <button onClick={onExport} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-          <Icon name="Download" size={12} /> CSV
-        </button>
+        <p className="text-xs text-muted-foreground">Средний чек — в последней строке каждой таблицы</p>
       </div>
 
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-secondary/50">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
-                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Абонементы</th>
-                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Доп. продажи</th>
-                <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">Итого</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((month, i) => {
-                const subVal = getValue(month, 'sub');
-                const addVal = getValue(month, 'add');
-                const totalVal = metric === 'avgCheck'
-                  ? 0
-                  : (metric === 'count'
-                    ? salesData[month].subCount + salesData[month].addCount
-                    : salesData[month].subSum + salesData[month].addSum);
-                return (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES[i]}
-                    </td>
-                    <td className="px-3 py-2 text-center">{fmtVal(subVal)}</td>
-                    <td className="px-3 py-2 text-center">{fmtVal(addVal)}</td>
-                    <td className="px-3 py-2 text-center font-semibold">
-                      {metric === 'avgCheck' ? '—' : fmtVal(totalVal)}
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                <td className="px-3 py-2 text-center">{fmtVal(yearSubVal)}</td>
-                <td className="px-3 py-2 text-center">{fmtVal(yearAddVal)}</td>
-                <td className="px-3 py-2 text-center">
-                  {metric === 'avgCheck' ? '—' : fmtVal(metric === 'count' ? yearSub.count + yearAdd.count : yearSub.sum + yearAdd.sum)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SalesTable title="Абонементы — план (количество)" headerBg="bg-blue-50"
+        items={subItems} months={months} salesType="subscription" metric="count"
+        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
+        onExport={() => exportTable('sub-plan')} />
+
+      <SalesTable title={`Абонементы — факт (${metric === 'count' ? 'количество' : 'сумма'})`} headerBg="bg-secondary/50"
+        items={subItems} months={months} salesType="subscription" metric={metric}
+        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
+        onExport={() => exportTable('sub-fact')} />
+
+      <SalesTable title="Доп. продажи — план (количество)" headerBg="bg-blue-50"
+        items={addItems} months={months} salesType="single" metric="count"
+        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
+        onExport={() => exportTable('add-plan')} />
+
+      <SalesTable title={`Доп. продажи — факт (${metric === 'count' ? 'количество' : 'сумма'})`} headerBg="bg-secondary/50"
+        items={addItems} months={months} salesType="single" metric={metric}
+        state={state} filterBranchIds={filterBranchIds} plansMap={salesPlansMap}
+        onExport={() => exportTable('add-fact')} />
     </div>
   );
 }

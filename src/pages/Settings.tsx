@@ -12,7 +12,7 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'planning';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -64,6 +64,130 @@ const PLANNING_COLUMNS: { key: keyof MonthlyPlanRow; label: string; hint?: strin
 ];
 
 const MONTH_NAMES_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+type SalesPlanItem = { planId: string; target: number };
+
+interface SalesPlanTabProps {
+  state: StoreType['state'];
+  setSalesPlan: (branchId: string, month: string, items: SalesPlanItem[]) => void;
+}
+
+function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedBranchId, setSelectedBranchId] = useState(state.currentBranchId);
+
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    return `${selectedYear}-${String(m).padStart(2, '0')}`;
+  });
+
+  const subPlans = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
+  const addPlans = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
+  const allItems = [...subPlans.map(p => ({ ...p, kind: 'sub' as const })), ...addPlans.map(p => ({ ...p, kind: 'add' as const }))];
+
+  type ValMap = Record<string, Record<string, string>>;
+  const [values, setValues] = useState<ValMap>({});
+
+  useEffect(() => {
+    const initial: ValMap = {};
+    months.forEach(month => {
+      initial[month] = {};
+      const plan = state.salesPlans.find(p => p.branchId === selectedBranchId && p.month === month);
+      allItems.forEach(item => {
+        const found = plan?.items.find(i => i.planId === item.id);
+        initial[month][item.id] = found ? String(found.target) : '';
+      });
+    });
+    setValues(initial);
+  }, [selectedYear, selectedBranchId, state.salesPlans, state.subscriptionPlans, state.singleVisitPlans]);
+
+  const handleChange = (month: string, itemId: string, val: string) => {
+    setValues(prev => ({ ...prev, [month]: { ...(prev[month] || {}), [itemId]: val } }));
+  };
+
+  const handleSaveAll = () => {
+    months.forEach(month => {
+      const items: SalesPlanItem[] = [];
+      allItems.forEach(item => {
+        const v = values[month]?.[item.id];
+        if (v !== undefined && v !== '') {
+          items.push({ planId: item.id, target: parseInt(v) || 0 });
+        }
+      });
+      if (items.length > 0) setSalesPlan(selectedBranchId, month, items);
+    });
+  };
+
+  const years = [currentYear - 1, currentYear, currentYear + 1];
+
+  const renderSection = (title: string, items: typeof allItems) => (
+    <div>
+      <h3 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">{title}</h3>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground mb-4">Нет позиций для этого филиала.</p>
+      ) : (
+        <div className="bg-white border border-border rounded-xl overflow-hidden mb-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
+                  {items.map(item => (
+                    <th key={item.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">{item.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((month, i) => (
+                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
+                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {MONTH_NAMES_SHORT[i]}
+                    </td>
+                    {items.map(item => (
+                      <td key={item.id} className="px-2 py-1.5">
+                        <Input
+                          type="number" min={0} placeholder="0"
+                          value={values[month]?.[item.id] ?? ''}
+                          onChange={e => handleChange(month, item.id, e.target.value)}
+                          className="text-center text-xs h-8"
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex flex-wrap items-end gap-4">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Год</label>
+          <select className="border border-input rounded-lg px-3 py-2 text-sm" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Филиал</label>
+          <select className="border border-input rounded-lg px-3 py-2 text-sm" value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}>
+            {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+        <Button onClick={handleSaveAll} className="bg-foreground text-primary-foreground hover:opacity-90">Сохранить всё</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Вводите плановое количество продаж по каждой позиции на каждый месяц.</p>
+      {renderSection('Абонементы', subPlans.map(p => ({ ...p, kind: 'sub' as const })))}
+      {renderSection('Доп. продажи', addPlans.map(p => ({ ...p, kind: 'add' as const })))}
+    </div>
+  );
+}
 
 interface ExpensePlanTabProps {
   state: StoreType['state'];
@@ -316,7 +440,7 @@ export default function Settings({ store }: SettingsProps) {
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
-    setMonthlyPlan, setExpensePlan,
+    setMonthlyPlan, setExpensePlan, setSalesPlan,
   } = store;
 
   const [tab, setTab] = useState<Tab>('trainings');
@@ -367,6 +491,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'sources', label: 'Источники', icon: 'Megaphone' },
     { id: 'expense-cats', label: 'Расходы', icon: 'TrendingDown' },
     { id: 'expense-plan', label: 'Расходы (план)', icon: 'ClipboardList' },
+    { id: 'sales-plan', label: 'Продажи (план)', icon: 'ShoppingCart' },
     { id: 'planning', label: 'Планирование', icon: 'Target' },
   ];
 
@@ -738,6 +863,11 @@ export default function Settings({ store }: SettingsProps) {
       {/* Расходы план по категориям */}
       {tab === 'expense-plan' && (
         <ExpensePlanTab state={state} setExpensePlan={setExpensePlan} />
+      )}
+
+      {/* Продажи план */}
+      {tab === 'sales-plan' && (
+        <SalesPlanTab state={state} setSalesPlan={setSalesPlan} />
       )}
 
       {/* Планирование */}
