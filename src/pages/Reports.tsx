@@ -7,6 +7,16 @@ function fmtMoney(val: number | undefined): string {
   return val.toLocaleString('ru-RU') + ' ₽';
 }
 
+function downloadCSV(filename: string, rows: string[][]) {
+  const bom = '\uFEFF';
+  const csv = bom + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface ReportsProps {
   store: StoreType;
 }
@@ -205,6 +215,92 @@ export default function Reports({ store }: ReportsProps) {
   }, [months, filterBranchIds, state.monthlyPlans]);
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
+  const branchLabel = filterBranchIds.length === state.branches.length ? 'все филиалы'
+    : state.branches.filter(b => filterBranchIds.includes(b.id)).map(b => b.name).join(', ');
+
+  const exportPlanFact = (type: 'plan' | 'fact') => {
+    const header = ['Месяц', ...COLUMNS.map(c => c.label), 'Итого год (справка)'];
+    const rows: string[][] = [header];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      COLUMNS.forEach(col => {
+        const val = type === 'plan'
+          ? plansMap[month]?.[col.key] as number | undefined
+          : factsMap[month]?.[col.key] as number;
+        row.push(val !== undefined && !isNaN(val as number) ? String(val) : '');
+      });
+      row.push('');
+      rows.push(row);
+    });
+    const totRow = ['Итого год'];
+    COLUMNS.forEach(col => {
+      const vals = months.map(m => (type === 'plan' ? plansMap[m]?.[col.key] : factsMap[m]?.[col.key]) as number).filter(v => v !== undefined && !isNaN(v));
+      const total = col.format === 'pct' || col.key === 'avgCheck'
+        ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0)
+        : vals.reduce((a, b) => a + b, 0);
+      totRow.push(String(Math.round(total * 100) / 100));
+    });
+    totRow.push('');
+    rows.push(totRow);
+    downloadCSV(`plan-fact-${type}-${selectedYear}-${branchLabel}.csv`, rows);
+  };
+
+  const exportExpenses = (type: 'plan' | 'fact') => {
+    const branchCats = state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId));
+    const header = ['Категория', ...MONTH_NAMES, 'Итого год'];
+    const rows: string[][] = [header];
+    branchCats.forEach(cat => {
+      const row = [cat.name];
+      let yearTotal = 0;
+      months.forEach(month => {
+        const [year, mon] = month.split('-').map(Number);
+        let val = 0;
+        if (type === 'fact') {
+          val = state.expenses.filter(e => {
+            const d = new Date(e.date);
+            return d.getFullYear() === year && d.getMonth() + 1 === mon && e.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(e.branchId));
+          }).reduce((s, e) => s + e.amount, 0);
+        } else {
+          val = state.expensePlans.find(ep => ep.month === month && ep.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(ep.branchId)))?.planAmount ?? 0;
+        }
+        yearTotal += val;
+        row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(yearTotal));
+      rows.push(row);
+    });
+    downloadCSV(`expenses-${type}-${selectedYear}-${branchLabel}.csv`, rows);
+  };
+
+  const exportSales = () => {
+    const header = ['Месяц', 'Абонементы (кол-во)', 'Абонементы (сумма)', 'Абонементы (ср. чек)', 'Доп. продажи (кол-во)', 'Доп. продажи (сумма)', 'Доп. продажи (ср. чек)', 'Итого кол-во', 'Итого сумма'];
+    const rows: string[][] = [header];
+    months.forEach((month, i) => {
+      const [year, mon] = month.split('-').map(Number);
+      const inM = (d: string) => { const dt = new Date(d); return dt.getFullYear() === year && dt.getMonth() + 1 === mon; };
+      const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+      const ms = state.sales.filter(s => inM(s.date) && bf(s.branchId));
+      const sub = ms.filter(s => s.type === 'subscription');
+      const add = ms.filter(s => s.type === 'single');
+      const subSum = sub.reduce((s, x) => s + x.finalPrice, 0);
+      const addSum = add.reduce((s, x) => s + x.finalPrice, 0);
+      rows.push([
+        MONTH_NAMES[i],
+        String(sub.length), String(subSum), String(sub.length > 0 ? Math.round(subSum / sub.length) : 0),
+        String(add.length), String(addSum), String(add.length > 0 ? Math.round(addSum / add.length) : 0),
+        String(sub.length + add.length), String(subSum + addSum),
+      ]);
+    });
+    downloadCSV(`sales-${selectedYear}-${branchLabel}.csv`, rows);
+  };
+
+  const exportAll = () => {
+    exportPlanFact('plan');
+    setTimeout(() => exportPlanFact('fact'), 300);
+    setTimeout(() => exportExpenses('plan'), 600);
+    setTimeout(() => exportExpenses('fact'), 900);
+    setTimeout(() => exportSales(), 1200);
+  };
 
   return (
     <div className="space-y-6">
@@ -238,11 +334,21 @@ export default function Reports({ store }: ReportsProps) {
             ))}
           </div>
         </div>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button onClick={exportAll} className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+            <Icon name="Download" size={14} /> Выгрузить всё
+          </button>
+        </div>
       </div>
 
       {/* Таблица ПЛАН */}
       <div>
-        <h2 className="text-base font-semibold mb-3">План</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">План / Факт — план</h2>
+          <button onClick={() => exportPlanFact('plan')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -298,7 +404,12 @@ export default function Reports({ store }: ReportsProps) {
 
       {/* Таблица ФАКТ */}
       <div>
-        <h2 className="text-base font-semibold mb-3">Факт</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">План / Факт — факт</h2>
+          <button onClick={() => exportPlanFact('fact')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -375,20 +486,22 @@ export default function Reports({ store }: ReportsProps) {
       </p>
 
       {/* РАЗДЕЛ: РАСХОДЫ */}
-      <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds} />
+      <ExpensesReport state={state} months={months} filterBranchIds={filterBranchIds}
+        onExportPlan={() => exportExpenses('plan')} onExportFact={() => exportExpenses('fact')} />
 
       {/* РАЗДЕЛ: ПРОДАЖИ */}
-      <SalesReport state={state} months={months} filterBranchIds={filterBranchIds} />
+      <SalesReport state={state} months={months} filterBranchIds={filterBranchIds} onExport={exportSales} />
     </div>
   );
 }
 
 type SalesMetric = 'count' | 'avgCheck' | 'sum';
 
-function SalesReport({ state, months, filterBranchIds }: {
+function SalesReport({ state, months, filterBranchIds, onExport }: {
   state: StoreType['state'];
   months: string[];
   filterBranchIds: string[];
+  onExport: () => void;
 }) {
   const [metric, setMetric] = useState<SalesMetric>('sum');
 
@@ -457,6 +570,9 @@ function SalesReport({ state, months, filterBranchIds }: {
             </button>
           ))}
         </div>
+        <button onClick={onExport} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+          <Icon name="Download" size={12} /> CSV
+        </button>
       </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
@@ -509,10 +625,12 @@ function SalesReport({ state, months, filterBranchIds }: {
   );
 }
 
-function ExpensesReport({ state, months, filterBranchIds }: {
+function ExpensesReport({ state, months, filterBranchIds, onExportPlan, onExportFact }: {
   state: StoreType['state'];
   months: string[];
   filterBranchIds: string[];
+  onExportPlan: () => void;
+  onExportFact: () => void;
 }) {
   const branchCategories = useMemo(() =>
     state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId)),
@@ -569,48 +687,53 @@ function ExpensesReport({ state, months, filterBranchIds }: {
     <div className="pt-4 border-t border-border space-y-6">
       <h2 className="text-lg font-semibold">Расходы по категориям</h2>
 
-      {/* ПЛАН расходов */}
+      {/* ПЛАН расходов: категории в строках, месяцы в столбцах */}
       <div>
-        <h3 className="text-base font-semibold mb-3">План</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold">План</h3>
+          <button onClick={onExportPlan} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-blue-50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[100px] z-10">Месяц</th>
-                  {branchCategories.map(cat => (
-                    <th key={cat.id} className="px-3 py-3 font-medium text-center whitespace-nowrap text-blue-800">{cat.name}</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[150px] z-10">Категория</th>
+                  {months.map((_, i) => (
+                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[90px] text-blue-800">{MONTH_NAMES[i]}</th>
                   ))}
-                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap text-blue-800">Итого</th>
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap text-blue-800 bg-blue-100/60">Итого год</th>
                 </tr>
               </thead>
               <tbody>
-                {months.map((month, i) => {
-                  const total = branchCategories.reduce((sum, cat) => sum + (planMap[month][cat.id] ?? 0), 0);
+                {branchCategories.map((cat, ci) => {
+                  const yearTotal = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
                   return (
-                    <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-blue-50/30'}`}>
+                    <tr key={cat.id} className={`border-b border-border/50 ${ci % 2 === 0 ? 'bg-white' : 'bg-blue-50/30'}`}>
                       <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                        style={{ background: i % 2 === 0 ? 'white' : 'rgb(239 246 255 / 0.5)' }}>
-                        {MONTH_NAMES[i]}
+                        style={{ background: ci % 2 === 0 ? 'white' : 'rgb(239 246 255 / 0.5)' }}>
+                        {cat.name}
                       </td>
-                      {branchCategories.map(cat => (
-                        <td key={cat.id} className="px-3 py-2 text-center text-blue-700">
+                      {months.map(month => (
+                        <td key={month} className="px-3 py-2 text-center text-blue-700">
                           {fmtMoney(planMap[month][cat.id])}
                         </td>
                       ))}
-                      <td className="px-3 py-2 text-center font-semibold text-blue-800">
-                        {total > 0 ? fmtMoney(total) : '—'}
+                      <td className="px-3 py-2 text-center font-semibold text-blue-900 bg-blue-50/60">
+                        {yearTotal > 0 ? fmtMoney(yearTotal) : '—'}
                       </td>
                     </tr>
                   );
                 })}
                 <tr className="border-t-2 border-border bg-blue-50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
-                  {branchCategories.map(cat => {
-                    const yearTotal = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
-                    return <td key={cat.id} className="px-3 py-2 text-center text-blue-900">{yearTotal > 0 ? fmtMoney(yearTotal) : '—'}</td>;
+                  <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого</td>
+                  {months.map(month => {
+                    const total = branchCategories.reduce((s, cat) => s + (planMap[month][cat.id] ?? 0), 0);
+                    return <td key={month} className="px-3 py-2 text-center text-blue-900">{total > 0 ? fmtMoney(total) : '—'}</td>;
                   })}
-                  <td className="px-3 py-2 text-center text-blue-900">
+                  <td className="px-3 py-2 text-center text-blue-900 bg-blue-100/60">
                     {fmtMoney(months.reduce((s, m) => s + branchCategories.reduce((ss, cat) => ss + (planMap[m][cat.id] ?? 0), 0), 0))}
                   </td>
                 </tr>
@@ -620,36 +743,43 @@ function ExpensesReport({ state, months, filterBranchIds }: {
         </div>
       </div>
 
-      {/* ФАКТ расходов */}
+      {/* ФАКТ расходов: категории в строках, месяцы в столбцах */}
       <div>
-        <h3 className="text-base font-semibold mb-3">Факт</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold">Факт</h3>
+          <button onClick={onExportFact} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <Icon name="Download" size={12} /> CSV
+          </button>
+        </div>
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
-                  {branchCategories.map(cat => (
-                    <th key={cat.id} className="px-3 py-3 font-medium text-center whitespace-nowrap">{cat.name}</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[150px] z-10">Категория</th>
+                  {months.map((_, i) => (
+                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[90px]">{MONTH_NAMES[i]}</th>
                   ))}
-                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap">Итого</th>
+                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap bg-secondary/80">Итого год</th>
                 </tr>
               </thead>
               <tbody>
-                {months.map((month, i) => {
-                  const total = branchCategories.reduce((sum, cat) => sum + (factMap[month][cat.id] ?? 0), 0);
+                {branchCategories.map((cat, ci) => {
+                  const yearFact = months.reduce((s, m) => s + (factMap[m][cat.id] ?? 0), 0);
+                  const yearPlan = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
+                  const yearPct = yearPlan > 0 ? ((yearFact - yearPlan) / yearPlan) * 100 : null;
                   return (
-                    <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <tr key={cat.id} className={`border-b border-border/50 ${ci % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
                       <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                        style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                        {MONTH_NAMES[i]}
+                        style={{ background: ci % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                        {cat.name}
                       </td>
-                      {branchCategories.map(cat => {
+                      {months.map(month => {
                         const fact = factMap[month][cat.id] ?? 0;
                         const plan = planMap[month][cat.id];
                         const pct = plan && plan > 0 ? ((fact - plan) / plan) * 100 : null;
                         return (
-                          <td key={cat.id} className="px-3 py-2 text-center">
+                          <td key={month} className="px-3 py-2 text-center">
                             <span className="font-medium">{fmtMoney(fact)}</span>
                             {pct !== null && (
                               <span className={`ml-1 text-[10px] ${pct <= 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -659,28 +789,24 @@ function ExpensesReport({ state, months, filterBranchIds }: {
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 text-center font-semibold">{fmtMoney(total)}</td>
+                      <td className="px-3 py-2 text-center bg-secondary/30">
+                        <span className="font-semibold">{fmtMoney(yearFact)}</span>
+                        {yearPct !== null && (
+                          <span className={`ml-1 text-[10px] ${yearPct <= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {yearPct >= 0 ? '+' : ''}{yearPct.toFixed(0)}%
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
                 <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                  {branchCategories.map(cat => {
-                    const yearFact = months.reduce((s, m) => s + (factMap[m][cat.id] ?? 0), 0);
-                    const yearPlan = months.reduce((s, m) => s + (planMap[m][cat.id] ?? 0), 0);
-                    const pct = yearPlan > 0 ? ((yearFact - yearPlan) / yearPlan) * 100 : null;
-                    return (
-                      <td key={cat.id} className="px-3 py-2 text-center">
-                        <span>{fmtMoney(yearFact)}</span>
-                        {pct !== null && (
-                          <span className={`ml-1 text-[10px] ${pct <= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
-                          </span>
-                        )}
-                      </td>
-                    );
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого</td>
+                  {months.map(month => {
+                    const total = branchCategories.reduce((s, cat) => s + (factMap[month][cat.id] ?? 0), 0);
+                    return <td key={month} className="px-3 py-2 text-center">{fmtMoney(total)}</td>;
                   })}
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-3 py-2 text-center bg-secondary/80">
                     {fmtMoney(months.reduce((s, m) => s + branchCategories.reduce((ss, cat) => ss + (factMap[m][cat.id] ?? 0), 0), 0))}
                   </td>
                 </tr>
@@ -689,8 +815,7 @@ function ExpensesReport({ state, months, filterBranchIds }: {
           </div>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          В таблице «Факт» для расходов: зелёный % = потратили меньше плана (хорошо), красный % = превысили план.
-          Плановые значения по категориям задаются в «Настройки» → «Расходы (план)».
+          Зелёный % = потратили меньше плана, красный % = превысили план.
         </p>
       </div>
     </div>
