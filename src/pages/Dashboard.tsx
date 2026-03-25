@@ -101,7 +101,20 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   // Средний чек
   const periodSales = branchSales.filter(s => inPeriod(s.date));
   const factAvgCheck = periodSales.length > 0 ? Math.round(periodSales.reduce((s, x) => s + x.finalPrice, 0) / periodSales.length) : 0;
-  const planAvgCheck = state.monthlyPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth)?.plan?.avgCheck ?? 0;
+  // Плановый средний чек считаем из плана продаж по абонементам: sum(target * price) / sum(target)
+  const planAvgCheck = (() => {
+    const plan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
+    if (!plan || plan.items.length === 0) return 0;
+    let totalRevenue = 0, totalCount = 0;
+    plan.items.forEach(item => {
+      const subPlan = state.subscriptionPlans.find(p => p.id === item.planId);
+      if (subPlan && item.target > 0) {
+        totalRevenue += subPlan.price * item.target;
+        totalCount += item.target;
+      }
+    });
+    return totalCount > 0 ? Math.round(totalRevenue / totalCount) : 0;
+  })();
   const avgCheckPct = planAvgCheck > 0 ? Math.round((factAvgCheck / planAvgCheck) * 100) : null;
 
   return (
