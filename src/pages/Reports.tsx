@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
 import { StoreType, MonthlyPlanRow } from '@/store';
 import Icon from '@/components/ui/icon';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 function fmtMoney(val: number | undefined): string {
   if (val === undefined || val === null || isNaN(val)) return '—';
@@ -194,6 +197,7 @@ export default function Reports({ store }: ReportsProps) {
   const [comments, setComments] = useState<Record<string, string>>({
     planfact: '', expenses: '', sales: '',
   });
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const months = generateMonths(selectedYear);
 
@@ -474,6 +478,144 @@ export default function Reports({ store }: ReportsProps) {
     downloadCSV(`otchety-${selectedYear}-${branchLabel}.csv`, allRows);
   };
 
+  // Общий сборщик секций (возвращает массив {title, rows})
+  const buildSections = () => {
+    const bf = (b: string) => filterBranchIds.length === 0 || filterBranchIds.includes(b);
+    const inM = (date: string, month: string) => {
+      const [y, mo] = month.split('-').map(Number);
+      const d = new Date(date);
+      return d.getFullYear() === y && d.getMonth() + 1 === mo;
+    };
+    const branchCats = state.expenseCategories.filter(c => filterBranchIds.length === 0 || filterBranchIds.includes(c.branchId));
+    const subPlans = state.subscriptionPlans.filter(p => bf(p.branchId));
+    const addPlans = state.singleVisitPlans.filter(p => bf(p.branchId));
+
+    const sections: { title: string; rows: string[][] }[] = [];
+
+    // План/Факт — план
+    const pfPlanRows: string[][] = [['Месяц', ...COLUMNS.map(c => c.label)]];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      COLUMNS.forEach(col => {
+        const val = plansMap[month]?.[col.key] as number | undefined;
+        row.push(val !== undefined && !isNaN(val as number) ? String(val) : '');
+      });
+      pfPlanRows.push(row);
+    });
+    const pTot = ['Итого год'];
+    COLUMNS.forEach(col => {
+      const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
+      const total = col.format === 'pct' || col.key === 'avgCheck' ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0) : vals.reduce((a, b) => a + b, 0);
+      pTot.push(vals.length > 0 ? String(Math.round(total * 100) / 100) : '');
+    });
+    pfPlanRows.push(pTot);
+    if (comments.planfact) pfPlanRows.push(['Комментарий:', comments.planfact]);
+    sections.push({ title: `План/Факт — план (${selectedYear})`, rows: pfPlanRows });
+
+    // План/Факт — факт
+    const pfFactRows: string[][] = [['Месяц', ...COLUMNS.map(c => c.label)]];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]];
+      COLUMNS.forEach(col => {
+        const val = factsMap[month]?.[col.key] as number | undefined;
+        row.push(val !== undefined && !isNaN(val as number) ? String(val) : '');
+      });
+      pfFactRows.push(row);
+    });
+    const fTot = ['Итого год'];
+    COLUMNS.forEach(col => {
+      const vals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
+      const total = col.format === 'pct' || col.key === 'avgCheck' ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0) : vals.reduce((a, b) => a + b, 0);
+      fTot.push(String(Math.round(total * 100) / 100));
+    });
+    pfFactRows.push(fTot);
+    sections.push({ title: `План/Факт — факт (${selectedYear})`, rows: pfFactRows });
+
+    // Расходы — план
+    const expPlanRows: string[][] = [['Категория', ...MONTH_NAMES, 'Итого год']];
+    branchCats.forEach(cat => {
+      const row = [cat.name]; let yearTotal = 0;
+      months.forEach(month => {
+        const val = state.expensePlans.find(ep => ep.month === month && ep.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(ep.branchId)))?.planAmount ?? 0;
+        yearTotal += val; row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(yearTotal)); expPlanRows.push(row);
+    });
+    if (comments.expenses) expPlanRows.push(['Комментарий:', comments.expenses]);
+    sections.push({ title: `Расходы — план (${selectedYear})`, rows: expPlanRows });
+
+    // Расходы — факт
+    const expFactRows: string[][] = [['Категория', ...MONTH_NAMES, 'Итого год']];
+    branchCats.forEach(cat => {
+      const row = [cat.name]; let yearTotal = 0;
+      months.forEach(month => {
+        const [year, mon] = month.split('-').map(Number);
+        const val = state.expenses.filter(e => { const d = new Date(e.date); return d.getFullYear() === year && d.getMonth() + 1 === mon && e.categoryId === cat.id && (filterBranchIds.length === 0 || filterBranchIds.includes(e.branchId)); }).reduce((s, e) => s + e.amount, 0);
+        yearTotal += val; row.push(val > 0 ? String(val) : '');
+      });
+      row.push(String(yearTotal)); expFactRows.push(row);
+    });
+    sections.push({ title: `Расходы — факт (${selectedYear})`, rows: expFactRows });
+
+    // Продажи — абонементы
+    const subRows: string[][] = [['Месяц', ...subPlans.map(p => p.name + ' (кол-во)'), ...subPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма']];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]]; let totalCnt = 0, totalSum = 0;
+      subPlans.forEach(plan => { const s = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)); row.push(String(s.length)); totalCnt += s.length; });
+      subPlans.forEach(plan => { const sum = state.sales.filter(s => s.type === 'subscription' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)).reduce((a, x) => a + x.finalPrice, 0); row.push(String(sum)); totalSum += sum; });
+      row.push(String(totalCnt), String(totalSum)); subRows.push(row);
+    });
+    sections.push({ title: `Продажи — абонементы (${selectedYear})`, rows: subRows });
+
+    // Продажи — доп. продажи
+    const addRows: string[][] = [['Месяц', ...addPlans.map(p => p.name + ' (кол-во)'), ...addPlans.map(p => p.name + ' (сумма)'), 'Итого кол-во', 'Итого сумма']];
+    months.forEach((month, i) => {
+      const row = [MONTH_NAMES[i]]; let totalCnt = 0, totalSum = 0;
+      addPlans.forEach(plan => { const s = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)); row.push(String(s.length)); totalCnt += s.length; });
+      addPlans.forEach(plan => { const sum = state.sales.filter(s => s.type === 'single' && s.itemId === plan.id && inM(s.date, month) && bf(s.branchId)).reduce((a, x) => a + x.finalPrice, 0); row.push(String(sum)); totalSum += sum; });
+      row.push(String(totalCnt), String(totalSum)); addRows.push(row);
+    });
+    if (comments.sales) addRows.push(['Комментарий:', comments.sales]);
+    sections.push({ title: `Продажи — доп. продажи (${selectedYear})`, rows: addRows });
+
+    return sections;
+  };
+
+  const exportAllExcel = () => {
+    const wb = XLSX.utils.book_new();
+    buildSections().forEach(({ title, rows }) => {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const sheetName = title.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+    XLSX.writeFile(wb, `otchety-${selectedYear}-${branchLabel}.xlsx`);
+    setShowExportMenu(false);
+  };
+
+  const exportAllPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const sections = buildSections();
+    sections.forEach((section, idx) => {
+      if (idx > 0) doc.addPage();
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(section.title, 14, 15);
+      const head = [section.rows[0]];
+      const body = section.rows.slice(1);
+      autoTable(doc, {
+        head,
+        body,
+        startY: 20,
+        styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: [40, 40, 40], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        margin: { left: 14, right: 14 },
+      });
+    });
+    doc.save(`otchety-${selectedYear}-${branchLabel}.pdf`);
+    setShowExportMenu(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Фильтры */}
@@ -506,10 +648,32 @@ export default function Reports({ store }: ReportsProps) {
             ))}
           </div>
         </div>
-        <div className="ml-auto">
-          <button onClick={exportAll} className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-            <Icon name="Download" size={14} /> Выгрузить всё
+        <div className="ml-auto relative">
+          <button
+            onClick={() => setShowExportMenu(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Icon name="Download" size={14} /> Выгрузить всё <Icon name="ChevronDown" size={13} />
           </button>
+          {showExportMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-border rounded-xl shadow-lg overflow-hidden min-w-[160px]">
+                <button
+                  onClick={exportAllExcel}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left"
+                >
+                  <Icon name="FileSpreadsheet" size={15} className="text-green-600" /> Excel (.xlsx)
+                </button>
+                <button
+                  onClick={exportAllPDF}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left border-t border-border"
+                >
+                  <Icon name="FileText" size={15} className="text-red-500" /> PDF
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
