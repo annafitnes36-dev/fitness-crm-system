@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useStore } from '@/store';
+import { useState, useEffect } from 'react';
+import { useStore, loadAuth, saveAuth, clearAuth } from '@/store';
 import Layout from '@/components/Layout';
 import SellModal from '@/components/SellModal';
 import InquiryModal from '@/components/InquiryModal';
@@ -24,14 +24,23 @@ export default function App() {
   const [sellClientId, setSellClientId] = useState<string | undefined>(undefined);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showExpense, setShowExpense] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadAuth());
+
+  useEffect(() => {
+    const savedStaffId = loadAuth();
+    if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
+      store.setCurrentStaff(savedStaffId);
+    }
+  }, []);
 
   const handleLogin = (staffId: string) => {
     store.setCurrentStaff(staffId);
+    saveAuth(staffId);
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
+    clearAuth();
     setIsAuthenticated(false);
   };
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export type ClientCategory = 'new' | 'loyal' | 'sleeping' | 'lost';
 
@@ -97,6 +97,8 @@ export interface ScheduleEntry {
   maxCapacity: number;
   enrolledClientIds: string[];
   hallId?: string;
+  isPersonal?: boolean;
+  personalClientId?: string;
 }
 
 export interface Visit {
@@ -489,11 +491,42 @@ const initialState: AppState = {
   currentBranchId: 'b1',
 };
 
+const STORAGE_KEY = 'fitcrm_state_v1';
+const AUTH_KEY = 'fitcrm_auth_v1';
+
+function loadState(): AppState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return { ...initialState, ...JSON.parse(raw) };
+  } catch (e) { /* ignore */ }
+  return initialState;
+}
+
+function saveState(s: AppState) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+}
+
+export function loadAuth(): string | null {
+  try { return localStorage.getItem(AUTH_KEY); } catch (e) { return null; }
+}
+
+export function saveAuth(staffId: string) {
+  try { localStorage.setItem(AUTH_KEY, staffId); } catch (e) { /* ignore */ }
+}
+
+export function clearAuth() {
+  try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+}
+
 export function useStore() {
-  const [state, setState] = useState<AppState>(initialState);
+  const [state, setState] = useState<AppState>(() => loadState());
 
   const update = useCallback((updater: (s: AppState) => AppState) => {
-    setState(prev => updater(prev));
+    setState(prev => {
+      const next = updater(prev);
+      saveState(next);
+      return next;
+    });
   }, []);
 
   const genId = () => Math.random().toString(36).slice(2, 10);
@@ -585,10 +618,18 @@ export function useStore() {
   };
 
   // Schedule
-  const addScheduleEntry = (entry: Omit<ScheduleEntry, 'id' | 'enrolledClientIds'>) => {
-    const newEntry: ScheduleEntry = { ...entry, id: genId(), enrolledClientIds: [] };
+  const addScheduleEntry = (entry: Omit<ScheduleEntry, 'id' | 'enrolledClientIds'> & { enrolledClientIds?: string[] }) => {
+    const newEntry: ScheduleEntry = { ...entry, id: genId(), enrolledClientIds: entry.enrolledClientIds || [] };
     update(s => ({ ...s, schedule: [...s.schedule, newEntry] }));
     return newEntry;
+  };
+
+  const updateScheduleEntry = (id: string, data: Partial<Omit<ScheduleEntry, 'id'>>) => {
+    update(s => ({ ...s, schedule: s.schedule.map(e => e.id === id ? { ...e, ...data } : e) }));
+  };
+
+  const removeScheduleEntry = (id: string) => {
+    update(s => ({ ...s, schedule: s.schedule.filter(e => e.id !== id) }));
   };
 
   const enrollClient = (scheduleId: string, clientId: string) => {
@@ -801,7 +842,7 @@ export function useStore() {
     addClient, updateClient,
     sellSubscription, sellSingleVisit,
     freezeSubscription, returnSubscription, updateSubscription,
-    addScheduleEntry, enrollClient, markVisit,
+    addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit,
     addBranch, updateBranch, removeBranch,
     addHall, updateHall, removeHall,
     addTrainer, updateTrainer, removeTrainer,

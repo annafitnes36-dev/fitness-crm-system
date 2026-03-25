@@ -3,7 +3,6 @@ import { StoreType, MonthlyPlanRow } from '@/store';
 import Icon from '@/components/ui/icon';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 function fmtMoney(val: number | undefined): string {
   if (val === undefined || val === null || isNaN(val)) return '—';
@@ -592,26 +591,52 @@ export default function Reports({ store }: ReportsProps) {
     setShowExportMenu(false);
   };
 
-  const exportAllPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const exportAllPDF = async () => {
+    const html2canvas = (await import('html2canvas')).default;
     const sections = buildSections();
-    sections.forEach((section, idx) => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+
+    for (let idx = 0; idx < sections.length; idx++) {
+      const section = sections[idx];
       if (idx > 0) doc.addPage();
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.text(section.title, 14, 15);
-      const head = [section.rows[0]];
-      const body = section.rows.slice(1);
-      autoTable(doc, {
-        head,
-        body,
-        startY: 20,
-        styles: { fontSize: 7, cellPadding: 1.5 },
-        headStyles: { fillColor: [40, 40, 40], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 248, 248] },
-        margin: { left: 14, right: 14 },
+
+      // Build an offscreen HTML table
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:fixed;left:-9999px;top:-9999px;background:#fff;font-family:Arial,sans-serif;font-size:11px;';
+      const h3 = document.createElement('div');
+      h3.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:6px;padding:4px 0;';
+      h3.textContent = section.title;
+      wrapper.appendChild(h3);
+
+      const table = document.createElement('table');
+      table.style.cssText = 'border-collapse:collapse;width:100%;';
+      section.rows.forEach((row, ri) => {
+        const tr = document.createElement('tr');
+        tr.style.background = ri === 0 ? '#1a1a1a' : ri % 2 === 0 ? '#f8f8f8' : '#fff';
+        row.forEach(cell => {
+          const td = document.createElement(ri === 0 ? 'th' : 'td');
+          td.style.cssText = `border:1px solid #ddd;padding:3px 5px;text-align:left;white-space:nowrap;color:${ri === 0 ? '#fff' : '#000'};font-size:10px;`;
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
       });
-    });
+      wrapper.appendChild(table);
+      document.body.appendChild(wrapper);
+
+      const canvas = await html2canvas(wrapper, { scale: 1.5, backgroundColor: '#ffffff', useCORS: true });
+      document.body.removeChild(wrapper);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.9);
+      const imgW = pageW - 10;
+      const imgH = (canvas.height / canvas.width) * imgW;
+      const maxH = pageH - 10;
+      const finalH = Math.min(imgH, maxH);
+      doc.addImage(imgData, 'JPEG', 5, 5, imgW, finalH);
+    }
+
     doc.save(`otchety-${selectedYear}-${branchLabel}.pdf`);
     setShowExportMenu(false);
   };
