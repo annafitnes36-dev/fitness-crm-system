@@ -539,66 +539,87 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b-2 border-border bg-secondary/60">
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/60 min-w-[230px] z-10">
-                  Показатель
+                <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/60 min-w-[100px] z-10">
+                  Месяц
                 </th>
-                {months.map((month, i) => (
-                  <th key={month} className="px-2 py-3 font-semibold text-center whitespace-nowrap min-w-[82px] border-l border-border/40">
-                    {MONTH_NAMES_SHORT[i]}
-                  </th>
-                ))}
+                {PLANNING_ROWS.map(row => {
+                  const isManual = PLAN_MANUAL_KEYS.has(row.key);
+                  return (
+                    <th key={row.key} className={`px-2 py-3 font-medium text-center whitespace-nowrap min-w-[110px] border-l ${isManual ? 'border-amber-200 bg-amber-50/60 text-amber-800' : 'border-border/40'}`}>
+                      {isManual && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1 mb-0.5" />}
+                      {row.label}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {PLANNING_ROWS.map((row, ri) => {
-                const isManual = PLAN_MANUAL_KEYS.has(row.key);
-                const rowBg = ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20';
-                const stickyBg = ri % 2 === 0 ? 'white' : 'rgb(248 248 248)';
-                return (
-                  <Fragment key={row.key}>
-                    {row.divider && (
-                      <tr className="h-0">
-                        <td colSpan={13} className="p-0 border-t-2 border-border/50" />
-                      </tr>
-                    )}
-                    <tr className={`border-b border-border/40 ${isManual ? 'bg-amber-50/60' : rowBg}`}>
-                      <td
-                        className={`px-4 py-2 sticky left-0 z-10 text-xs whitespace-nowrap ${isManual ? 'font-semibold text-amber-900' : 'font-medium'}`}
-                        style={{ background: isManual ? 'rgb(255 251 235 / 0.9)' : stickyBg }}
-                      >
-                        {isManual && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 mb-0.5" />}
-                        {row.label}
+              {months.map((month, i) => (
+                <tr key={month} className={`border-b border-border/40 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                  <td
+                    className="px-4 py-2 font-semibold sticky left-0 z-10 text-xs whitespace-nowrap"
+                    style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}
+                  >
+                    {MONTH_NAMES_SHORT[i]}
+                  </td>
+                  {PLANNING_ROWS.map(row => {
+                    const isManual = PLAN_MANUAL_KEYS.has(row.key);
+                    const vals = compute(month);
+                    const computedVal = vals[row.key] ?? 0;
+                    const manualVal = manual[month]?.[row.key] ?? '';
+
+                    if (isManual) {
+                      return (
+                        <td key={row.key} className="px-1.5 py-1 border-l border-amber-200 bg-amber-50/40">
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-full bg-white border border-amber-300 rounded text-center text-xs font-medium text-amber-900 focus:outline-none focus:border-amber-400 focus:bg-amber-50 py-1 placeholder:text-amber-200"
+                            value={manualVal}
+                            onChange={e => handleChange(month, row.key, e.target.value)}
+                            placeholder="—"
+                          />
+                        </td>
+                      );
+                    }
+
+                    return (
+                      <td key={row.key} className="px-2 py-2 text-center border-l border-border/20 font-medium tabular-nums">
+                        {fmt(row, computedVal)}
                       </td>
-                      {months.map(month => {
-                        const vals = compute(month);
-                        const computedVal = vals[row.key] ?? 0;
-                        const manualVal = manual[month]?.[row.key] ?? '';
-
-                        if (isManual) {
-                          return (
-                            <td key={month} className="px-1.5 py-1 border-l border-amber-200 bg-amber-50">
-                              <input
-                                type="number"
-                                min={0}
-                                className="w-full bg-white border border-amber-300 rounded text-center text-xs font-medium text-amber-900 focus:outline-none focus:border-amber-400 focus:bg-amber-50 py-1 placeholder:text-amber-200"
-                                value={manualVal}
-                                onChange={e => handleChange(month, row.key, e.target.value)}
-                                placeholder="—"
-                              />
-                            </td>
-                          );
-                        }
-
-                        return (
-                          <td key={month} className="px-2 py-2 text-center border-l border-border/20 font-medium tabular-nums">
-                            {fmt(row, computedVal)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </Fragment>
-                );
-              })}
+                    );
+                  })}
+                </tr>
+              ))}
+              {/* Итого за год */}
+              <tr className="border-t-2 border-border bg-secondary/60 font-semibold">
+                <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-xs" style={{ background: 'rgb(243 244 246)' }}>
+                  Итого / среднее
+                </td>
+                {PLANNING_ROWS.map(row => {
+                  const isManual = PLAN_MANUAL_KEYS.has(row.key);
+                  if (isManual) {
+                    const vals = months.map(m => parseFloat(manual[m]?.[row.key] ?? '0') || 0).filter(v => v > 0);
+                    const total = row.isPercent
+                      ? (vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0)
+                      : vals.reduce((a, b) => a + b, 0);
+                    return (
+                      <td key={row.key} className="px-2 py-2 text-center border-l border-amber-200 tabular-nums bg-amber-50/30">
+                        {total > 0 ? (row.isPercent ? `${total}%` : total) : <span className="text-muted-foreground/30">—</span>}
+                      </td>
+                    );
+                  }
+                  const vals = months.map(m => compute(m)[row.key] ?? 0).filter(v => v > 0);
+                  const total = row.isPercent || row.key === 'avgCheck'
+                    ? (vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0)
+                    : vals.reduce((a, b) => a + b, 0);
+                  return (
+                    <td key={row.key} className="px-2 py-2 text-center border-l border-border/20 tabular-nums">
+                      {fmt(row, total)}
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
