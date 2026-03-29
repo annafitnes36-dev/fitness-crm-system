@@ -522,6 +522,10 @@ export default function Settings({ store }: SettingsProps) {
   const [editingExpCat, setEditingExpCat] = useState<ExpenseCategory | null>(null);
   const [expCatForm, setExpCatForm] = useState({ name: '' });
 
+  // Проверка — является ли текущий сотрудник директором (должна быть ДО allTabs)
+  const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
+  const isDirector = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+
   const allTabs: { id: Tab; label: string; icon: string; directorOnly?: boolean }[] = [
     { id: 'trainings', label: 'Тренировки', icon: 'Dumbbell' },
     { id: 'training-cats', label: 'Категории', icon: 'Tag' },
@@ -622,9 +626,7 @@ export default function Settings({ store }: SettingsProps) {
     setShowAddExpCat(false);
   };
 
-  // Проверка — является ли текущий сотрудник директором
-  const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
-  const isDirector = currentStaff?.role === 'director';
+
 
   return (
     <div className="space-y-5 animate-fade-in">
