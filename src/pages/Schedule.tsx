@@ -133,8 +133,8 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
   };
 
   const handleAddEntry = () => {
-    if (addMode === 'group' && (!form.trainingTypeId || !form.trainerId)) return;
-    if (addMode === 'personal' && (!form.trainerId || !form.personalClientId)) return;
+    if (addMode === 'group' && (!form.trainingTypeId || !form.trainerId || !form.hallId)) return;
+    if (addMode === 'personal' && (!form.trainerId || !form.personalClientId || !form.hallId)) return;
     addScheduleEntry({
       trainingTypeId: form.trainingTypeId,
       trainerId: form.trainerId,
@@ -221,8 +221,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     const entry = state.schedule.find(e => e.id === attendModal.entryId);
     const tt = entry ? state.trainingTypes.find(t => t.id === entry.trainingTypeId) : null;
     const extraPrice = tt?.extraPrice ?? null;
+    // Проверяем: если разовое посещение помечено "без доплат" — доплата не нужна
+    const singlePlanNoExtra = isSingle && singlePlan?.noExtraCharge === true;
 
-    if (extraPrice && extraPrice > 0) {
+    if (extraPrice && extraPrice > 0 && !singlePlanNoExtra) {
       // Требуется доплата — показываем модал оплаты
       setExtraModal({
         clientId: attendModal.clientId,
@@ -871,10 +873,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 <Input type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} className="h-8 text-sm" />
               </div>
               <div>
-                <Label className="text-xs">Зал</Label>
+                <Label className="text-xs">Зал <span className="text-red-500">*</span></Label>
                 <select value={form.hallId} onChange={e => setForm(f => ({ ...f, hallId: e.target.value }))}
-                  className="w-full h-8 text-sm border border-input rounded-md px-2 bg-white">
-                  <option value="">Без зала</option>
+                  className={`w-full h-8 text-sm border rounded-md px-2 bg-white ${!form.hallId ? 'border-red-300' : 'border-input'}`}>
+                  <option value="">— выберите зал —</option>
                   {branchHalls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
               </div>
@@ -939,10 +941,10 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 <Input type="time" value={editForm.time || ''} onChange={e => setEditForm(f => ({ ...f, time: e.target.value }))} className="h-8 text-sm" />
               </div>
               <div>
-                <Label className="text-xs">Зал</Label>
+                <Label className="text-xs">Зал <span className="text-red-500">*</span></Label>
                 <select value={editForm.hallId || ''} onChange={e => setEditForm(f => ({ ...f, hallId: e.target.value || undefined }))}
                   className="w-full h-8 text-sm border border-input rounded-md px-2 bg-white">
-                  <option value="">Без зала</option>
+                  <option value="">— выберите зал —</option>
                   {branchHalls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
               </div>

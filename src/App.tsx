@@ -15,6 +15,7 @@ import Branches from '@/pages/Branches';
 import Staff from '@/pages/Staff';
 import Settings from '@/pages/Settings';
 import Reports from '@/pages/Reports';
+import Notifications from '@/pages/Notifications';
 import Login from '@/pages/Login';
 
 export default function App() {
@@ -90,6 +91,7 @@ export default function App() {
       case 'branches': return <Branches store={store} />;
       case 'staff': return <Staff store={store} />;
       case 'settings': return <Settings store={store} />;
+      case 'notifications': return <Notifications store={store} />;
       default: return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
     }
   };

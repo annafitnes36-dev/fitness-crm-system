@@ -1,12 +1,23 @@
+import { useState } from 'react';
 import { StoreType } from '@/store';
+import Icon from '@/components/ui/icon';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 interface FinanceProps {
   store: StoreType;
 }
 
-export default function Finance({ store }: FinanceProps) {
-  const { state } = store;
+type FinanceTab = 'operations' | 'expenses';
 
+export default function Finance({ store }: FinanceProps) {
+  const { state, addExpense, updateExpense, deleteExpense } = store;
+  const [tab, setTab] = useState<FinanceTab>('operations');
+
+  // ── Вкладка операций ─────────────────────────────────────────────────
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   const branchVisits = state.visits.filter(v => {
     const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
@@ -56,103 +67,339 @@ export default function Finance({ store }: FinanceProps) {
     }),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
+  // ── Вкладка расходов ─────────────────────────────────────────────────
+  const now = new Date();
+  const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+  const [expDateFrom, setExpDateFrom] = useState(currentMonthStart);
+  const [expDateTo, setExpDateTo] = useState(currentMonthEnd);
+  const [expBranchId, setExpBranchId] = useState(state.currentBranchId);
+  const [expCategoryId, setExpCategoryId] = useState('');
+
+  // Редактирование расхода
+  const [editingExpense, setEditingExpense] = useState<typeof state.expenses[0] | null>(null);
+  const [editForm, setEditForm] = useState({ amount: '', comment: '', date: '', categoryId: '', paymentMethod: 'cash' as 'cash' | 'card' });
+  const [showEdit, setShowEdit] = useState(false);
+
+  const openEdit = (exp: typeof state.expenses[0]) => {
+    setEditingExpense(exp);
+    setEditForm({ amount: String(exp.amount), comment: exp.comment, date: exp.date, categoryId: exp.categoryId, paymentMethod: exp.paymentMethod });
+    setShowEdit(true);
+  };
+
+  const handleEditSave = () => {
+    if (!editingExpense) return;
+    updateExpense(editingExpense.id, {
+      amount: parseFloat(editForm.amount) || 0,
+      comment: editForm.comment,
+      date: editForm.date,
+      categoryId: editForm.categoryId,
+      paymentMethod: editForm.paymentMethod,
+    });
+    setShowEdit(false);
+    setEditingExpense(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Удалить расход?')) deleteExpense(id);
+  };
+
+  // Фильтрация расходов
+  const filteredExpenses = state.expenses.filter(e => {
+    const matchBranch = !expBranchId || e.branchId === expBranchId;
+    const matchCat = !expCategoryId || e.categoryId === expCategoryId;
+    const matchFrom = !expDateFrom || e.date >= expDateFrom;
+    const matchTo = !expDateTo || e.date <= expDateTo;
+    return matchBranch && matchCat && matchFrom && matchTo;
+  }).sort((a, b) => b.date.localeCompare(a.date));
+
+  const totalFiltered = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+
+  // Расходы по категориям (для отчёта)
+  const byCategory: Record<string, number> = {};
+  filteredExpenses.forEach(e => {
+    byCategory[e.categoryId] = (byCategory[e.categoryId] || 0) + e.amount;
+  });
+
+  const branchCategories = state.expenseCategories.filter(c => !expBranchId || c.branchId === expBranchId);
+
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="grid grid-cols-3 gap-4">
-        <div className="stat-card">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Общая выручка</div>
-          <div className="text-2xl font-semibold">{totalRevenue.toLocaleString()} ₽</div>
-          <div className="text-xs text-muted-foreground mt-1">за всё время</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементы</div>
-          <div className="text-2xl font-semibold">{subRevenue.toLocaleString()} ₽</div>
-          <div className="text-xs text-muted-foreground mt-1">{branchSales.filter(s => s.type === 'subscription').length} продаж</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Разовые визиты</div>
-          <div className="text-2xl font-semibold">{singleVisitRevenue.toLocaleString()} ₽</div>
-          <div className="text-xs text-muted-foreground mt-1">{branchVisits.filter(v => v.isSingleVisit).length} посещений</div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-secondary rounded-xl p-1 w-fit">
+        {([['operations', 'Операции'], ['expenses', 'Расходы']] as [FinanceTab, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Monthly breakdown */}
-      {months.length > 0 && (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">По месяцам</div>
-          <table className="w-full data-table">
-            <thead>
-              <tr>
-                <th>Месяц</th>
-                <th>Абонементы</th>
-                <th>Разовые</th>
-                <th>Наличные</th>
-                <th>Безналичные</th>
-                <th>Итого</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map(m => {
-                const d = byMonth[m];
-                const [year, month] = m.split('-');
-                const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-                return (
-                  <tr key={m}>
-                    <td className="font-medium capitalize">{label}</td>
-                    <td>{d.sub.toLocaleString()} ₽</td>
-                    <td className="text-muted-foreground">{d.single.toLocaleString()} ₽</td>
-                    <td className="text-muted-foreground">{d.cash.toLocaleString()} ₽</td>
-                    <td className="text-muted-foreground">{d.card.toLocaleString()} ₽</td>
-                    <td className="font-semibold">{(d.sub + d.single).toLocaleString()} ₽</td>
+      {tab === 'operations' && (
+        <>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="stat-card">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Общая выручка</div>
+              <div className="text-2xl font-semibold">{totalRevenue.toLocaleString()} ₽</div>
+              <div className="text-xs text-muted-foreground mt-1">за всё время</div>
+            </div>
+            <div className="stat-card">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементы</div>
+              <div className="text-2xl font-semibold">{subRevenue.toLocaleString()} ₽</div>
+              <div className="text-xs text-muted-foreground mt-1">{branchSales.filter(s => s.type === 'subscription').length} продаж</div>
+            </div>
+            <div className="stat-card">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Разовые визиты</div>
+              <div className="text-2xl font-semibold">{singleVisitRevenue.toLocaleString()} ₽</div>
+              <div className="text-xs text-muted-foreground mt-1">{branchVisits.filter(v => v.isSingleVisit).length} посещений</div>
+            </div>
+          </div>
+
+          {months.length > 0 && (
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">По месяцам</div>
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th>Месяц</th>
+                    <th>Абонементы</th>
+                    <th>Разовые</th>
+                    <th>Наличные</th>
+                    <th>Безналичные</th>
+                    <th>Итого</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {months.map(m => {
+                    const d = byMonth[m];
+                    const [year, month] = m.split('-');
+                    const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+                    return (
+                      <tr key={m}>
+                        <td className="font-medium capitalize">{label}</td>
+                        <td>{d.sub.toLocaleString()} ₽</td>
+                        <td className="text-muted-foreground">{d.single.toLocaleString()} ₽</td>
+                        <td className="text-muted-foreground">{d.cash.toLocaleString()} ₽</td>
+                        <td className="text-muted-foreground">{d.card.toLocaleString()} ₽</td>
+                        <td className="font-semibold">{(d.sub + d.single).toLocaleString()} ₽</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              История операций
+            </div>
+            <table className="w-full data-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Клиент</th>
+                  <th>Позиция</th>
+                  <th>Тип</th>
+                  <th>Оплата</th>
+                  <th>Сумма</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allTransactions.map(t => (
+                  <tr key={t.id}>
+                    <td className="text-muted-foreground text-sm">{t.date}</td>
+                    <td className="font-medium text-sm">
+                      {t.client ? `${t.client.lastName} ${t.client.firstName}` : '—'}
+                    </td>
+                    <td className="text-sm text-muted-foreground">{t.item}</td>
+                    <td>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${t.type === 'Абонемент' ? 'badge-loyal' : 'badge-other'}`}>
+                        {t.type}
+                      </span>
+                    </td>
+                    <td className="text-sm">{t.method === 'cash' ? 'Нал' : 'Безнал'}</td>
+                    <td className="font-semibold text-green-600">+{t.amount.toLocaleString()} ₽</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {allTransactions.length === 0 && (
+              <div className="py-10 text-center text-sm text-muted-foreground">Операций пока нет</div>
+            )}
+          </div>
+        </>
       )}
 
-      {/* Transactions */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          История операций
-        </div>
-        <table className="w-full data-table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Клиент</th>
-              <th>Позиция</th>
-              <th>Тип</th>
-              <th>Оплата</th>
-              <th>Сумма</th>
-            </tr>
-          </thead>
-          <tbody>
-            {allTransactions.map(t => (
-              <tr key={t.id}>
-                <td className="text-muted-foreground text-sm">{t.date}</td>
-                <td className="font-medium text-sm">
-                  {t.client ? `${t.client.lastName} ${t.client.firstName}` : '—'}
-                </td>
-                <td className="text-sm text-muted-foreground">{t.item}</td>
-                <td>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${t.type === 'Абонемент' ? 'badge-loyal' : 'badge-other'}`}>
-                    {t.type}
-                  </span>
-                </td>
-                <td className="text-sm">
-                  {t.method === 'cash' ? 'Нал' : 'Безнал'}
-                </td>
-                <td className="font-semibold text-green-600">+{t.amount.toLocaleString()} ₽</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {allTransactions.length === 0 && (
-          <div className="py-10 text-center text-sm text-muted-foreground">Операций пока нет</div>
-        )}
-      </div>
+      {tab === 'expenses' && (
+        <>
+          {/* Фильтры */}
+          <div className="bg-white border border-border rounded-xl p-4 flex flex-wrap items-end gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Дата с</label>
+              <input type="date" value={expDateFrom} onChange={e => setExpDateFrom(e.target.value)}
+                className="border border-input rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Дата по</label>
+              <input type="date" value={expDateTo} onChange={e => setExpDateTo(e.target.value)}
+                className="border border-input rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Филиал</label>
+              <select className="border border-input rounded-lg px-3 py-2 text-sm" value={expBranchId} onChange={e => setExpBranchId(e.target.value)}>
+                <option value="">Все</option>
+                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Категория</label>
+              <select className="border border-input rounded-lg px-3 py-2 text-sm" value={expCategoryId} onChange={e => setExpCategoryId(e.target.value)}>
+                <option value="">Все категории</option>
+                {branchCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="ml-auto text-right">
+              <div className="text-xs text-muted-foreground">Итого за период</div>
+              <div className="text-xl font-semibold text-red-600">{totalFiltered.toLocaleString()} ₽</div>
+            </div>
+          </div>
+
+          {/* По категориям */}
+          {Object.keys(byCategory).length > 0 && (
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">По категориям</div>
+              <table className="w-full data-table">
+                <thead>
+                  <tr>
+                    <th>Категория</th>
+                    <th>Сумма</th>
+                    <th>% от итога</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(byCategory)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([catId, amount]) => {
+                      const cat = state.expenseCategories.find(c => c.id === catId);
+                      const pct = totalFiltered > 0 ? Math.round((amount / totalFiltered) * 100) : 0;
+                      return (
+                        <tr key={catId}>
+                          <td className="font-medium">{cat?.name || 'Без категории'}</td>
+                          <td className="font-semibold text-red-600">{amount.toLocaleString()} ₽</td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 bg-secondary rounded-full h-1.5">
+                                <div className="bg-red-400 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  <tr className="border-t-2 border-border font-semibold">
+                    <td>Итого</td>
+                    <td className="text-red-600">{totalFiltered.toLocaleString()} ₽</td>
+                    <td>100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Список транзакций расходов */}
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Транзакции расходов
+            </div>
+            <table className="w-full data-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Категория</th>
+                  <th>Комментарий</th>
+                  <th>Оплата</th>
+                  <th>Сумма</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredExpenses.map(exp => {
+                  const cat = state.expenseCategories.find(c => c.id === exp.categoryId);
+                  return (
+                    <tr key={exp.id}>
+                      <td className="text-muted-foreground text-sm">{exp.date}</td>
+                      <td className="text-sm font-medium">{cat?.name || '—'}</td>
+                      <td className="text-sm text-muted-foreground">{exp.comment || '—'}</td>
+                      <td className="text-sm">{exp.paymentMethod === 'cash' ? 'Нал' : 'Безнал'}</td>
+                      <td className="font-semibold text-red-600">−{exp.amount.toLocaleString()} ₽</td>
+                      <td>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => openEdit(exp)} className="text-muted-foreground hover:text-foreground transition-colors">
+                            <Icon name="Pencil" size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(exp.id)} className="text-muted-foreground hover:text-red-500 transition-colors">
+                            <Icon name="Trash2" size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredExpenses.length === 0 && (
+              <div className="py-10 text-center text-sm text-muted-foreground">Расходов за выбранный период нет</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Модал редактирования расхода */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактировать расход</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>Дата</Label>
+              <Input type="date" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Категория</Label>
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm mt-1"
+                value={editForm.categoryId} onChange={e => setEditForm(f => ({ ...f, categoryId: e.target.value }))}>
+                <option value="">— выберите —</option>
+                {state.expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Сумма, ₽</Label>
+              <Input type="number" min={0} value={editForm.amount}
+                onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Способ оплаты</Label>
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm mt-1"
+                value={editForm.paymentMethod} onChange={e => setEditForm(f => ({ ...f, paymentMethod: e.target.value as 'cash' | 'card' }))}>
+                <option value="cash">Наличные</option>
+                <option value="card">Безналичные</option>
+              </select>
+            </div>
+            <div>
+              <Label>Комментарий</Label>
+              <Textarea value={editForm.comment} onChange={e => setEditForm(f => ({ ...f, comment: e.target.value }))} rows={2} />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleEditSave} className="flex-1 bg-foreground text-primary-foreground hover:opacity-90">Сохранить</Button>
+              <Button variant="outline" onClick={() => setShowEdit(false)} className="flex-1">Отмена</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

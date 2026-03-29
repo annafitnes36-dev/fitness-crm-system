@@ -96,6 +96,14 @@ export default function Clients({ store, onSell }: ClientsProps) {
 
   const selectedClient = selectedClientId ? state.clients.find(c => c.id === selectedClientId) : null;
 
+  // Счётчики по категориям
+  const categoryCounts = allBranchClients.reduce<Record<string, number>>((acc, c) => {
+    const cat = getClientCategory(c);
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {});
+  const totalCount = allBranchClients.length;
+
   return (
     <div className="flex gap-5 h-full animate-fade-in">
       {/* Left panel */}
@@ -178,15 +186,19 @@ export default function Clients({ store, onSell }: ClientsProps) {
         )}
 
         <div className="flex gap-1 mb-4">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${category === cat.id ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {categories.map(cat => {
+            const count = cat.id === 'all' ? totalCount : (categoryCounts[cat.id] || 0);
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${category === cat.id ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
+              >
+                {cat.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${category === cat.id ? 'bg-white/20 text-white' : 'bg-secondary text-muted-foreground'}`}>{count}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="bg-white border border-border rounded-xl overflow-hidden flex-1">

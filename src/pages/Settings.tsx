@@ -121,6 +121,14 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
+  // Для получения цены абонемента по id
+  const getPlanPrice = (itemId: string) => {
+    const sp = state.subscriptionPlans.find(p => p.id === itemId);
+    if (sp) return sp.price;
+    const svp = state.singleVisitPlans.find(p => p.id === itemId);
+    return svp?.price ?? 0;
+  };
+
   const renderSection = (title: string, items: typeof allItems) => (
     <div>
       <h3 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">{title}</h3>
@@ -132,70 +140,59 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[100px] z-10">Месяц</th>
-                  {items.map(item => (
-                    <th key={item.id} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[130px]">{item.name}</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[160px] z-10">Абонемент</th>
+                  {months.map((_, i) => (
+                    <th key={i} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[70px]">{MONTH_NAMES_SHORT[i]}</th>
                   ))}
-                  <th className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[90px] text-muted-foreground">Итого</th>
                 </tr>
               </thead>
               <tbody>
-                {months.map((month, i) => {
-                  const monthTotal = items.reduce((sum, item) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
-                  return (
-                  <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap"
-                      style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
-                      {MONTH_NAMES_SHORT[i]}
+                {items.map((item, ri) => (
+                  <tr key={item.id} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                    <td className="px-4 py-2 font-medium sticky left-0 z-10 whitespace-nowrap text-xs"
+                      style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>
+                      {item.name}
                     </td>
-                    {items.map(item => (
-                      <td key={item.id} className="px-2 py-1.5">
+                    {months.map((month) => (
+                      <td key={month} className="px-1.5 py-1.5">
                         <Input
                           type="number" min={0} placeholder="0"
                           value={values[month]?.[item.id] ?? ''}
                           onChange={e => handleChange(month, item.id, e.target.value)}
-                          className="text-center text-xs h-8"
+                          className="text-center text-xs h-7 px-1"
                         />
                       </td>
                     ))}
-                    <td className="px-2 py-2 text-center font-semibold text-sm text-muted-foreground">
-                      {monthTotal > 0 ? monthTotal : '—'}
-                    </td>
                   </tr>
-                  );
-                })}
-                {/* Итого по каждой позиции */}
+                ))}
+                {/* Итого кол-во по месяцу */}
                 <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                  {items.map(item => {
-                    const total = months.reduce((sum, month) => {
-                      const v = parseInt(values[month]?.[item.id] ?? '0') || 0;
-                      return sum + v;
-                    }, 0);
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground text-xs" style={{ background: 'rgb(243 244 246)' }}>Итого, шт.</td>
+                  {months.map(month => {
+                    const total = items.reduce((sum, item) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
                     return (
-                      <td key={item.id} className="px-2 py-2 text-center text-sm font-semibold">
+                      <td key={month} className="px-2 py-2 text-center text-xs font-semibold">
                         {total > 0 ? total : '—'}
                       </td>
                     );
                   })}
-                  <td className="px-2 py-2 text-center font-semibold">
-                    {months.reduce((s, m) => s + items.reduce((ss, it) => ss + (parseInt(values[m]?.[it.id] ?? '0') || 0), 0), 0) || '—'}
-                  </td>
                 </tr>
-                {/* Средний в месяц */}
-                <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground italic text-xs">
-                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(250 250 250)' }}>Ср. в месяц</td>
-                  {items.map(item => {
-                    const filled = months.filter(month => parseInt(values[month]?.[item.id] ?? '0') > 0);
-                    const total = filled.reduce((sum, month) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
-                    const avg = filled.length > 0 ? Math.round(total / filled.length) : 0;
+                {/* Средний чек по месяцу */}
+                <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground text-xs">
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(250 250 250)' }}>Средний чек</td>
+                  {months.map(month => {
+                    const totalQty = items.reduce((sum, item) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
+                    const totalRev = items.reduce((sum, item) => {
+                      const qty = parseInt(values[month]?.[item.id] ?? '0') || 0;
+                      return sum + qty * getPlanPrice(item.id);
+                    }, 0);
+                    const avg = totalQty > 0 ? Math.round(totalRev / totalQty) : 0;
                     return (
-                      <td key={item.id} className="px-2 py-2 text-center">
-                        {avg > 0 ? avg : '—'}
+                      <td key={month} className="px-2 py-2 text-center">
+                        {avg > 0 ? `${avg.toLocaleString()} ₽` : '—'}
                       </td>
                     );
                   })}
-                  <td className="px-2 py-2 text-center">—</td>
                 </tr>
               </tbody>
             </table>
@@ -511,7 +508,7 @@ export default function Settings({ store }: SettingsProps) {
 
   const [showAddSingle, setShowAddSingle] = useState(false);
   const [editingSingle, setEditingSingle] = useState<SingleVisitPlan | null>(null);
-  const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[], autoActivateDays: '' as string | number });
+  const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[], autoActivateDays: '' as string | number, noExtraCharge: false });
 
   const [newChannel, setNewChannel] = useState('');
   const [editChannel, setEditChannel] = useState<{ old: string; val: string } | null>(null);
@@ -609,12 +606,12 @@ export default function Settings({ store }: SettingsProps) {
     setShowAddPlan(false);
   };
 
-  const openAddSingle = () => { setEditingSingle(null); setSingleForm({ name: '', price: 0, trainingTypeIds: [], autoActivateDays: '' }); setShowAddSingle(true); };
-  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds, autoActivateDays: p.autoActivateDays ?? '' }); setShowAddSingle(true); };
+  const openAddSingle = () => { setEditingSingle(null); setSingleForm({ name: '', price: 0, trainingTypeIds: [], autoActivateDays: '', noExtraCharge: false }); setShowAddSingle(true); };
+  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds, autoActivateDays: p.autoActivateDays ?? '', noExtraCharge: p.noExtraCharge ?? false }); setShowAddSingle(true); };
   const handleSaveSingle = () => {
     if (!singleForm.name || singleForm.price <= 0) return;
     const autoActivateDays = singleForm.autoActivateDays !== '' && singleForm.autoActivateDays !== null ? Number(singleForm.autoActivateDays) : null;
-    const baseData = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, autoActivateDays };
+    const baseData = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, autoActivateDays, noExtraCharge: singleForm.noExtraCharge };
     if (editingSingle) {
       updateSingleVisitPlan(editingSingle.id, { ...baseData, branchId: editingSingle.branchId });
     } else {
@@ -826,6 +823,9 @@ export default function Settings({ store }: SettingsProps) {
                     <div className="font-medium">{p.name}</div>
                     <div className="text-xl font-bold mt-1">{p.price.toLocaleString()} ₽</div>
                     <div className="text-xs text-muted-foreground mt-1">{state.branches.find(b => b.id === p.branchId)?.name}</div>
+                    {p.noExtraCharge && (
+                      <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Без доплат</span>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <button onClick={() => openEditSingle(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"><Icon name="Pencil" size={13} /></button>
@@ -1118,6 +1118,15 @@ export default function Settings({ store }: SettingsProps) {
                     {tt.name}
                   </button>
                 ))}
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30">
+              <input type="checkbox" id="noExtraCharge" checked={singleForm.noExtraCharge}
+                onChange={e => setSingleForm(f => ({ ...f, noExtraCharge: e.target.checked }))}
+                className="mt-0.5 accent-foreground cursor-pointer" />
+              <div>
+                <label htmlFor="noExtraCharge" className="text-sm font-medium cursor-pointer">Без доплат</label>
+                <p className="text-xs text-muted-foreground mt-0.5">Клиент с этим разовым посещением сможет посещать тренировки с доплатой без её оплаты</p>
               </div>
             </div>
             <Button onClick={handleSaveSingle} disabled={!singleForm.name || singleForm.price <= 0} className="w-full bg-foreground text-primary-foreground">{editingSingle ? 'Сохранить' : 'Добавить'}</Button>

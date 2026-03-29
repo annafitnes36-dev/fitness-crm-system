@@ -67,6 +67,8 @@ export interface SingleVisitPlan {
   branchId: string;
   // Срок автоактивации разового (дни с покупки до автоактивации), null — сразу
   autoActivateDays: number | null;
+  // Если true — при записи по этому посещению доплата за тренировку не требуется
+  noExtraCharge?: boolean;
 }
 
 export interface Subscription {
@@ -529,6 +531,7 @@ function loadState(): AppState {
       }));
       const singleVisitPlans = (parsed.singleVisitPlans || []).map((p: SingleVisitPlan) => ({
         autoActivateDays: p.autoActivateDays ?? null,
+        noExtraCharge: p.noExtraCharge ?? false,
         ...p,
       }));
       const trainers = (parsed.trainers || []).map((t: Trainer) => ({
@@ -830,6 +833,14 @@ export function useStore() {
     update(s => ({ ...s, expenses: [...s.expenses, { ...expense, id: genId() }] }));
   };
 
+  const updateExpense = (id: string, data: Partial<Expense>) => {
+    update(s => ({ ...s, expenses: s.expenses.map(e => e.id === id ? { ...e, ...data } : e) }));
+  };
+
+  const deleteExpense = (id: string) => {
+    update(s => ({ ...s, expenses: s.expenses.filter(e => e.id !== id) }));
+  };
+
   const addExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
     update(s => ({ ...s, expenseCategories: [...s.expenseCategories, { ...category, id: genId() }] }));
   };
@@ -996,7 +1007,7 @@ export function useStore() {
     addInquiry,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
-    addExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
+    addExpense, updateExpense, deleteExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
     setSalesPlan, setMonthlyPlan, setExpensePlan,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,

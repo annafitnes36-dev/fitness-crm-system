@@ -21,16 +21,50 @@ const ALL_NAV_ITEMS = [
   { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard', permKey: 'menuSubscriptions' as keyof Permission },
   { id: 'sales', label: 'Продажи', icon: 'ShoppingBag', permKey: 'menuSales' as keyof Permission },
   { id: 'finance', label: 'Финансы', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
+  { id: 'notifications', label: 'Уведомления', icon: 'Bell', permKey: 'menuDashboard' as keyof Permission },
   { id: 'branches', label: 'Филиалы', icon: 'Building2', permKey: 'menuBranches' as keyof Permission },
   { id: 'staff', label: 'Сотрудники', icon: 'UserCog', permKey: 'menuStaff' as keyof Permission },
   { id: 'settings', label: 'Настройки', icon: 'Settings', permKey: 'menuSettings' as keyof Permission },
 ];
+
+function countNotifications(store: StoreType): number {
+  const { state } = store;
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const todayStr = fmt(today);
+  const tomorrowStr = fmt(new Date(today.getTime() + 86400000));
+  const yesterdayStr = fmt(new Date(today.getTime() - 86400000));
+  const in3Days = fmt(new Date(today.getTime() + 3 * 86400000));
+  const ago14Days = fmt(new Date(today.getTime() - 14 * 86400000));
+  const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
+  const branchScheduleIds = new Set(state.schedule.filter(e => e.branchId === state.currentBranchId).map(e => e.id));
+  const clientFirstVisitDate: Record<string, string> = {};
+  state.visits.filter(v => branchScheduleIds.has(v.scheduleEntryId)).sort((a, b) => a.date.localeCompare(b.date)).forEach(v => { if (!clientFirstVisitDate[v.clientId]) clientFirstVisitDate[v.clientId] = v.date; });
+  let count = 0;
+  for (const client of branchClients) {
+    const sub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
+    if (client.birthDate && client.birthDate.slice(5) === todayStr.slice(5)) count++;
+    if (sub && sub.status === 'active' && sub.endDate === in3Days) count++;
+    if (sub && sub.sessionsLeft === 1) count++;
+    if (state.sales.some(s => s.clientId === client.id && s.type === 'subscription' && s.date === ago14Days)) count++;
+    const firstDate = clientFirstVisitDate[client.id];
+    if (firstDate === todayStr) count++;
+    if (firstDate === tomorrowStr) count++;
+    if (firstDate === yesterdayStr) {
+      const v = state.visits.find(v2 => v2.clientId === client.id && v2.date === yesterdayStr && branchScheduleIds.has(v2.scheduleEntryId));
+      if (v && (v.status === 'missed' || v.status === 'cancelled')) count++;
+      if (v && v.status === 'attended' && !state.subscriptions.some(s => s.clientId === client.id)) count++;
+    }
+  }
+  return count;
+}
 
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
   const { state, setCurrentBranch } = store;
   const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
   const perms = currentStaff?.permissions;
+  const notifCount = countNotifications(store);
 
   const navItems = perms
     ? ALL_NAV_ITEMS.filter(item => perms[item.permKey] !== false)
@@ -67,6 +101,11 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
             >
               <Icon name={item.icon} size={16} className="shrink-0" />
               {item.label}
+              {item.id === 'notifications' && notifCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {notifCount}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -100,7 +139,7 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
           <h1 className="text-base font-semibold">
-            {navItems.find(n => n.id === activePage)?.label}
+            {ALL_NAV_ITEMS.find(n => n.id === activePage)?.label ?? activePage}
           </h1>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>{currentBranch?.name}</span>
