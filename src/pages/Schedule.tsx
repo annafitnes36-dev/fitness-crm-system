@@ -729,6 +729,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                             {client.lastName} {client.firstName}
                           </button>
                           {isFirst && <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">1-й раз</span>}
+                          {!client.activeSubscriptionId && !state.subscriptions.some(s => s.clientId === client.id) && <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">новичок</span>}
                           {subEnding && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">⚠ абон. кончается</span>}
                         </div>
                         {client.comment && (

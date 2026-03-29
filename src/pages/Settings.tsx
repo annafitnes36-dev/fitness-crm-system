@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StoreType, TrainingCategory, Hall, Trainer, TrainingType, SubscriptionPlan, SingleVisitPlan, ExpenseCategory, MonthlyPlanRow } from '@/store';
+import { StoreType, TrainingCategory, Hall, Trainer, TrainingType, SubscriptionPlan, SingleVisitPlan, ExpenseCategory, MonthlyPlanRow, NotificationCategory, DEFAULT_NOTIFICATION_CATEGORIES } from '@/store';
 import type { ExpensePlan } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +12,7 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning';
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -465,6 +465,149 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
   );
 }
 
+const NOTIF_ICONS = ['Bell', 'Cake', 'CalendarX', 'AlertCircle', 'ShoppingBag', 'Star', 'UserX', 'CreditCard', 'Clock', 'Mail', 'Phone', 'Heart', 'Flag', 'Zap'];
+const NOTIF_COLORS = ['text-pink-500', 'text-orange-500', 'text-amber-500', 'text-blue-500', 'text-violet-500', 'text-indigo-500', 'text-red-500', 'text-emerald-600', 'text-cyan-500', 'text-gray-500'];
+
+function NotificationCategoriesTab({
+  categories,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  categories: NotificationCategory[];
+  onAdd: (cat: Omit<NotificationCategory, 'id'>) => void;
+  onUpdate: (id: string, data: Partial<NotificationCategory>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<NotificationCategory | null>(null);
+  const [form, setForm] = useState<Omit<NotificationCategory, 'id'>>({
+    key: '', label: '', icon: 'Bell', color: 'text-blue-500', enabled: true,
+  });
+
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ key: '', label: '', icon: 'Bell', color: 'text-blue-500', enabled: true });
+    setShowAdd(true);
+  };
+  const openEdit = (cat: NotificationCategory) => {
+    setEditing(cat);
+    setForm({ key: cat.key, label: cat.label, icon: cat.icon, color: cat.color, enabled: cat.enabled, daysAhead: cat.daysAhead, daysAgo: cat.daysAgo });
+    setShowAdd(true);
+  };
+  const handleSave = () => {
+    if (!form.label || !form.key) return;
+    if (editing) onUpdate(editing.id, form);
+    else onAdd(form);
+    setShowAdd(false);
+  };
+
+  const isDefault = (cat: NotificationCategory) => DEFAULT_NOTIFICATION_CATEGORIES.some(d => d.key === cat.key);
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Управляйте типами уведомлений и их условиями срабатывания</p>
+        <Button onClick={openAdd} className="bg-foreground text-primary-foreground hover:opacity-90">
+          <Icon name="Plus" size={14} className="mr-1.5" /> Добавить категорию
+        </Button>
+      </div>
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="divide-y divide-border">
+          {categories.map(cat => (
+            <div key={cat.id} className="flex items-center gap-3 px-4 py-3">
+              <Icon name={cat.icon} size={16} className={cat.color} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{cat.label}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                  <span>ключ: {cat.key}</span>
+                  {cat.daysAhead !== undefined && <span>· за {cat.daysAhead} дн.</span>}
+                  {cat.daysAgo !== undefined && <span>· {cat.daysAgo} дней назад</span>}
+                </div>
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cat.enabled}
+                  onChange={e => onUpdate(cat.id, { enabled: e.target.checked })}
+                  className="accent-foreground cursor-pointer"
+                />
+                <span className="text-xs text-muted-foreground">{cat.enabled ? 'Вкл' : 'Выкл'}</span>
+              </label>
+              <button onClick={() => openEdit(cat)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground">
+                <Icon name="Pencil" size={13} />
+              </button>
+              {!isDefault(cat) && (
+                <button onClick={() => { if (confirm('Удалить категорию?')) onRemove(cat.id); }} className="p-1.5 rounded hover:bg-red-50 text-red-400">
+                  <Icon name="Trash2" size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{editing ? 'Редактировать категорию' : 'Новая категория уведомлений'}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Название *</Label>
+              <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Например: Пришёл второй раз" />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Ключ (уникальный, латиница) *</Label>
+              <Input value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value.replace(/[^a-z0-9_]/g, '') }))} placeholder="my_notification" disabled={!!editing && isDefault(editing)} />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Иконка</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {NOTIF_ICONS.map(ic => (
+                  <button key={ic} onClick={() => setForm(f => ({ ...f, icon: ic }))}
+                    className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${form.icon === ic ? 'border-foreground bg-secondary' : 'border-border hover:bg-secondary'}`}>
+                    <Icon name={ic} size={14} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Цвет иконки</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {NOTIF_COLORS.map(c => {
+                  const dot = c.replace('text-', 'bg-');
+                  return (
+                    <button key={c} onClick={() => setForm(f => ({ ...f, color: c }))}
+                      className={`w-7 h-7 rounded-full border-2 transition-transform ${form.color === c ? 'scale-125 border-foreground' : 'border-transparent hover:scale-110'}`}>
+                      <div className={`w-full h-full rounded-full ${dot}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">За N дней (daysAhead)</Label>
+                <Input type="number" min={0} value={form.daysAhead ?? ''} onChange={e => setForm(f => ({ ...f, daysAhead: e.target.value ? Number(e.target.value) : undefined }))} placeholder="Пусто = не используется" />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">N дней назад (daysAgo)</Label>
+                <Input type="number" min={0} value={form.daysAgo ?? ''} onChange={e => setForm(f => ({ ...f, daysAgo: e.target.value ? Number(e.target.value) : undefined }))} placeholder="Пусто = не используется" />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} className="accent-foreground cursor-pointer" />
+              <span className="text-sm">Включена</span>
+            </label>
+            <Button onClick={handleSave} disabled={!form.label || !form.key} className="w-full bg-foreground text-primary-foreground">
+              {editing ? 'Сохранить' : 'Добавить'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function Settings({ store }: SettingsProps) {
   const {
     state,
@@ -478,6 +621,7 @@ export default function Settings({ store }: SettingsProps) {
     addAdSource, updateAdSource, removeAdSource,
     addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
     setMonthlyPlan, setExpensePlan, setSalesPlan,
+    addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
   } = store;
 
   const [tab, setTab] = useState<Tab>('trainings');
@@ -535,6 +679,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'expense-plan', label: 'Расходы (план)', icon: 'ClipboardList' },
     { id: 'sales-plan', label: 'Продажи (план)', icon: 'ShoppingCart' },
     { id: 'planning', label: 'Планирование', icon: 'Target' },
+    { id: 'notifications', label: 'Уведомления', icon: 'Bell' },
   ];
   const tabs = allTabs.filter(t => !t.directorOnly || isDirector);
 
@@ -944,6 +1089,16 @@ export default function Settings({ store }: SettingsProps) {
       {/* Планирование */}
       {tab === 'planning' && (
         <PlanningTab state={state} setMonthlyPlan={setMonthlyPlan} />
+      )}
+
+      {/* Уведомления */}
+      {tab === 'notifications' && (
+        <NotificationCategoriesTab
+          categories={state.notificationCategories}
+          onAdd={addNotificationCategory}
+          onUpdate={updateNotificationCategory}
+          onRemove={removeNotificationCategory}
+        />
       )}
 
       {/* Modals */}

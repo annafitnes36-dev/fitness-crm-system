@@ -34,8 +34,15 @@ function countNotifications(store: StoreType): number {
   const todayStr = fmt(today);
   const tomorrowStr = fmt(new Date(today.getTime() + 86400000));
   const yesterdayStr = fmt(new Date(today.getTime() - 86400000));
-  const in3Days = fmt(new Date(today.getTime() + 3 * 86400000));
-  const ago14Days = fmt(new Date(today.getTime() - 14 * 86400000));
+
+  const catMap: Record<string, typeof state.notificationCategories[0]> = {};
+  (state.notificationCategories ?? []).forEach(c => { catMap[c.key] = c; });
+  const daysAhead = catMap['sub_end']?.daysAhead ?? 3;
+  const daysAgo = catMap['two_weeks']?.daysAgo ?? 14;
+  const inNDays = fmt(new Date(today.getTime() + daysAhead * 86400000));
+  const agoNDays = fmt(new Date(today.getTime() - daysAgo * 86400000));
+
+  const dismissed = new Set(state.dismissedNotifications ?? []);
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
   const branchScheduleIds = new Set(state.schedule.filter(e => e.branchId === state.currentBranchId).map(e => e.id));
   const clientFirstVisitDate: Record<string, string> = {};
@@ -43,17 +50,17 @@ function countNotifications(store: StoreType): number {
   let count = 0;
   for (const client of branchClients) {
     const sub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
-    if (client.birthDate && client.birthDate.slice(5) === todayStr.slice(5)) count++;
-    if (sub && sub.status === 'active' && sub.endDate === in3Days) count++;
-    if (sub && sub.sessionsLeft === 1) count++;
-    if (state.sales.some(s => s.clientId === client.id && s.type === 'subscription' && s.date === ago14Days)) count++;
+    if (catMap['birthday']?.enabled && client.birthDate && client.birthDate.slice(5) === todayStr.slice(5) && !dismissed.has(`birthday:${client.id}:${todayStr}`)) count++;
+    if (catMap['sub_end']?.enabled && sub && sub.status === 'active' && sub.endDate === inNDays && !dismissed.has(`sub_end:${client.id}:${sub.endDate}`)) count++;
+    if (catMap['last_session']?.enabled && sub && sub.sessionsLeft === 1 && !dismissed.has(`last_session:${client.id}:${sub.id}`)) count++;
+    if (catMap['two_weeks']?.enabled && state.sales.some(s => s.clientId === client.id && s.type === 'subscription' && s.date === agoNDays) && !dismissed.has(`two_weeks:${client.id}:${agoNDays}`)) count++;
     const firstDate = clientFirstVisitDate[client.id];
-    if (firstDate === todayStr) count++;
-    if (firstDate === tomorrowStr) count++;
+    if (catMap['first_today']?.enabled && firstDate === todayStr && !dismissed.has(`first_today:${client.id}:${todayStr}`)) count++;
+    if (catMap['first_tomorrow']?.enabled && firstDate === tomorrowStr && !dismissed.has(`first_tomorrow:${client.id}:${tomorrowStr}`)) count++;
     if (firstDate === yesterdayStr) {
       const v = state.visits.find(v2 => v2.clientId === client.id && v2.date === yesterdayStr && branchScheduleIds.has(v2.scheduleEntryId));
-      if (v && (v.status === 'missed' || v.status === 'cancelled')) count++;
-      if (v && v.status === 'attended' && !state.subscriptions.some(s => s.clientId === client.id)) count++;
+      if (catMap['missed_first']?.enabled && v && (v.status === 'missed' || v.status === 'cancelled') && !dismissed.has(`missed_first:${client.id}:${yesterdayStr}`)) count++;
+      if (catMap['no_sub_after_first']?.enabled && v && v.status === 'attended' && !state.subscriptions.some(s => s.clientId === client.id) && !dismissed.has(`no_sub_after_first:${client.id}:${yesterdayStr}`)) count++;
     }
   }
   return count;

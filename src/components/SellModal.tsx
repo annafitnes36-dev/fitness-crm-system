@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { StoreType, Client } from '@/store';
+import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
 
 interface SellModalProps {
@@ -12,6 +12,8 @@ interface SellModalProps {
   store: StoreType;
   preselectedClientId?: string;
 }
+
+const fmt = (d: Date) => d.toISOString().split('T')[0];
 
 export default function SellModal({ open, onClose, store, preselectedClientId }: SellModalProps) {
   const { state, sellSubscription, sellSingleVisit, getClientFullName, addClientToBranch } = store;
@@ -23,8 +25,15 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('card');
 
+  // Дата продажи
+  const [saleDate, setSaleDate] = useState(fmt(new Date()));
+  const isBackDate = saleDate < fmt(new Date());
+
+  // Поля для задним числом (абонемент)
+  const [activationDate, setActivationDate] = useState('');
+  const [sessionsSpent, setSessionsSpent] = useState(0);
+
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId);
-  // Поиск по имени — только свой филиал; по телефону (5+ цифр) — все филиалы
   const isPhoneSearch = clientSearch.replace(/\D/g, '').length >= 5;
   const filteredClients = clientSearch
     ? (isPhoneSearch
@@ -41,36 +50,47 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
   const price = selectedItem?.price || 0;
   const finalPrice = Math.round(price * (1 - discount / 100));
 
+  const selectedPlan = selectedType === 'subscription'
+    ? state.subscriptionPlans.find(p => p.id === selectedItemId)
+    : null;
+  const hasSessionsLimit = selectedPlan && selectedPlan.sessionsLimit !== 'unlimited';
+
   const handleConfirm = () => {
     if (!selectedClientId || !selectedItemId) return;
-    // Если клиент из другого филиала — добавляем в текущий
     const client = state.clients.find(c => c.id === selectedClientId);
     if (client && client.branchId !== state.currentBranchId) {
       addClientToBranch(selectedClientId, state.currentBranchId);
     }
     if (selectedType === 'subscription') {
-      sellSubscription(selectedClientId, selectedItemId, discount, paymentMethod);
+      sellSubscription(selectedClientId, selectedItemId, discount, paymentMethod, {
+        saleDate,
+        activationDate: isBackDate && activationDate ? activationDate : undefined,
+        sessionsSpent: isBackDate && hasSessionsLimit && sessionsSpent > 0 ? sessionsSpent : undefined,
+      });
     } else {
-      sellSingleVisit(selectedClientId, selectedItemId, paymentMethod);
+      sellSingleVisit(selectedClientId, selectedItemId, paymentMethod, {
+        discount,
+        saleDate,
+      });
     }
-    onClose();
-    setStep('client');
-    setSelectedClientId('');
-    setSelectedItemId('');
-    setDiscount(0);
+    handleClose();
   };
 
   const handleClose = () => {
     onClose();
     setStep('client');
-    setSelectedClientId('');
+    setSelectedClientId(preselectedClientId || '');
     setSelectedItemId('');
     setDiscount(0);
+    setSaleDate(fmt(new Date()));
+    setActivationDate('');
+    setSessionsSpent(0);
+    setClientSearch('');
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Продажа</DialogTitle>
         </DialogHeader>
@@ -149,16 +169,66 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
               ))}
             </div>
 
-            {selectedType === 'subscription' && (
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Скидка (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={discount}
-                  onChange={e => setDiscount(Number(e.target.value))}
-                />
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Скидка (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={discount}
+                onChange={e => setDiscount(Number(e.target.value))}
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Дата продажи</Label>
+              <Input
+                type="date"
+                value={saleDate}
+                max={fmt(new Date())}
+                onChange={e => {
+                  setSaleDate(e.target.value);
+                  if (e.target.value >= fmt(new Date())) {
+                    setActivationDate('');
+                    setSessionsSpent(0);
+                  }
+                }}
+              />
+            </div>
+
+            {isBackDate && selectedType === 'subscription' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-3">
+                <div className="flex items-center gap-1.5 text-amber-700 text-xs font-medium">
+                  <Icon name="Clock" size={13} />
+                  Продажа задним числом — заполните данные активации
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Дата активации абонемента</Label>
+                  <Input
+                    type="date"
+                    value={activationDate}
+                    max={fmt(new Date())}
+                    onChange={e => setActivationDate(e.target.value)}
+                    placeholder="Когда клиент начал ходить"
+                  />
+                </div>
+                {hasSessionsLimit && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">
+                      Уже потрачено тренировок (из {selectedPlan!.sessionsLimit})
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={selectedPlan!.sessionsLimit as number}
+                      value={sessionsSpent}
+                      onChange={e => setSessionsSpent(Number(e.target.value))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Останется: {Math.max(0, (selectedPlan!.sessionsLimit as number) - sessionsSpent)} тренировок
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -182,7 +252,8 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
                 <span className="text-sm text-muted-foreground">К оплате</span>
                 <div className="text-right">
                   {discount > 0 && <div className="text-xs text-muted-foreground line-through">{price.toLocaleString()} ₽</div>}
-                  <div className="font-semibold">{finalPrice.toLocaleString()} ₽</div>
+                  <div className="text-base font-semibold">{finalPrice.toLocaleString()} ₽</div>
+                  {discount > 0 && <div className="text-xs text-emerald-600">скидка {discount}%</div>}
                 </div>
               </div>
             )}
@@ -190,9 +261,9 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
             <Button
               onClick={handleConfirm}
               disabled={!selectedItemId}
-              className="w-full bg-foreground text-primary-foreground hover:opacity-90"
+              className="w-full"
             >
-              Подтвердить продажу
+              Провести продажу
             </Button>
           </div>
         )}

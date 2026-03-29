@@ -437,6 +437,29 @@ const defaultExpenses: Expense[] = [
   { id: 'exp2', branchId: 'b1', categoryId: 'ec2', amount: 30000, date: fmt(addDays(today, -10)), comment: 'Зарплата Ивановой', paymentMethod: 'cash' },
 ];
 
+export interface NotificationCategory {
+  id: string;
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  enabled: boolean;
+  // Настройки условий
+  daysAhead?: number;  // за сколько дней предупреждать (для "заканчивается абонемент")
+  daysAgo?: number;    // сколько дней назад (для "2 недели назад")
+}
+
+export const DEFAULT_NOTIFICATION_CATEGORIES: NotificationCategory[] = [
+  { id: 'nc1', key: 'birthday', label: 'Дни рождения', icon: 'Cake', color: 'text-pink-500', enabled: true },
+  { id: 'nc2', key: 'sub_end', label: 'Абонемент заканчивается', icon: 'CalendarX', color: 'text-orange-500', enabled: true, daysAhead: 3 },
+  { id: 'nc3', key: 'last_session', label: 'Последняя тренировка', icon: 'AlertCircle', color: 'text-amber-500', enabled: true },
+  { id: 'nc4', key: 'two_weeks', label: 'Куплено N дней назад', icon: 'ShoppingBag', color: 'text-blue-500', enabled: true, daysAgo: 14 },
+  { id: 'nc5', key: 'first_today', label: 'Первая тренировка сегодня', icon: 'Star', color: 'text-violet-500', enabled: true },
+  { id: 'nc6', key: 'first_tomorrow', label: 'Первая тренировка завтра', icon: 'Bell', color: 'text-indigo-500', enabled: true },
+  { id: 'nc7', key: 'missed_first', label: 'Не пришёл на первую', icon: 'UserX', color: 'text-red-500', enabled: true },
+  { id: 'nc8', key: 'no_sub_after_first', label: 'После первой — нет абонемента', icon: 'CreditCard', color: 'text-emerald-600', enabled: true },
+];
+
 export interface AppState {
   branches: Branch[];
   halls: Hall[];
@@ -461,6 +484,8 @@ export interface AppState {
   contactChannels: string[];
   adSources: string[];
   currentBranchId: string;
+  dismissedNotifications: string[]; // ключи вида `${categoryKey}:${clientId}:${date}`
+  notificationCategories: NotificationCategory[];
 }
 
 const defaultStaff: StaffMember[] = [
@@ -508,6 +533,8 @@ const initialState: AppState = {
   contactChannels: ['Instagram', 'WhatsApp', 'Telegram', 'Телефон', 'VK', 'Лично'],
   adSources: ['Таргет Instagram', 'Таргет VK', 'Сарафанное радио', 'Вывеска', 'Google', 'Яндекс', 'Блогер'],
   currentBranchId: 'b1',
+  dismissedNotifications: [],
+  notificationCategories: DEFAULT_NOTIFICATION_CATEGORIES,
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -543,7 +570,17 @@ function loadState(): AppState {
         extraPriceName: tt.extraPriceName ?? null,
         ...tt,
       }));
-      return { ...initialState, ...parsed, subscriptions, subscriptionPlans, singleVisitPlans, trainers, trainingTypes };
+      return {
+        ...initialState,
+        ...parsed,
+        subscriptions,
+        subscriptionPlans,
+        singleVisitPlans,
+        trainers,
+        trainingTypes,
+        dismissedNotifications: parsed.dismissedNotifications ?? [],
+        notificationCategories: parsed.notificationCategories ?? DEFAULT_NOTIFICATION_CATEGORIES,
+      };
     }
   } catch (e) { /* ignore */ }
   return initialState;
@@ -590,39 +627,53 @@ export function useStore() {
   };
 
   // Sales & Subscriptions
-  const sellSubscription = (clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card') => {
+  const sellSubscription = (
+    clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card',
+    opts?: { saleDate?: string; activationDate?: string; sessionsSpent?: number }
+  ) => {
     const plan = state.subscriptionPlans.find(p => p.id === planId);
     if (!plan) return;
+    const saleDate = opts?.saleDate ?? fmt(new Date());
     const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription');
     const hadSub = prevSubs.length > 0;
     const lastSale = prevSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
-    const isReturn = hadSub && lastSale ? (new Date(fmt(new Date())).getTime() - new Date(lastSale.date).getTime()) > 30 * 24 * 60 * 60 * 1000 : false;
+    const isReturn = hadSub && lastSale ? (new Date(saleDate).getTime() - new Date(lastSale.date).getTime()) > 30 * 24 * 60 * 60 * 1000 : false;
     const isRenewal = hadSub && !isReturn;
     const isFirst = !hadSub;
     const finalPrice = Math.round(plan.price * (1 - discount / 100));
     const subId = genId();
     const saleId = genId();
-    // Если задан autoActivateDays — абонемент pending, endDate будет пересчитан при активации
-    const hasPendingMode = plan.autoActivateDays != null;
-    const autoActivateDate = hasPendingMode ? fmt(addDays(new Date(), plan.autoActivateDays!)) : null;
-    const endDate = hasPendingMode
-      ? fmt(addDays(new Date(), plan.autoActivateDays! + plan.durationDays))
-      : fmt(addDays(new Date(), plan.durationDays));
+    // Если задан activationDate — абонемент активирован с указанной даты
+    // Если задан autoActivateDays (и нет activationDate) — pending
+    const hasPendingMode = plan.autoActivateDays != null && !opts?.activationDate;
+    const activationDate = opts?.activationDate ?? null;
+    const autoActivateDate = hasPendingMode ? fmt(addDays(new Date(saleDate), plan.autoActivateDays!)) : null;
+    const endDate = activationDate
+      ? fmt(addDays(new Date(activationDate), plan.durationDays))
+      : hasPendingMode
+        ? fmt(addDays(new Date(saleDate), plan.autoActivateDays! + plan.durationDays))
+        : fmt(addDays(new Date(saleDate), plan.durationDays));
+
+    let sessionsLeft: number | 'unlimited' = plan.sessionsLimit;
+    if (opts?.sessionsSpent && plan.sessionsLimit !== 'unlimited') {
+      sessionsLeft = Math.max(0, (plan.sessionsLimit as number) - opts.sessionsSpent);
+    }
+
     const newSub: Subscription = {
       id: subId, clientId, planId, planName: plan.name,
-      purchaseDate: fmt(new Date()), endDate,
-      sessionsLeft: plan.sessionsLimit,
+      purchaseDate: saleDate, endDate,
+      sessionsLeft,
       freezeDaysLeft: plan.freezeDays,
       frozenFrom: null, frozenTo: null,
-      status: hasPendingMode ? 'pending' : 'active',
+      status: activationDate ? 'active' : hasPendingMode ? 'pending' : 'active',
       price: plan.price, discount, paymentMethod, branchId: plan.branchId,
-      activatedAt: hasPendingMode ? null : fmt(new Date()),
+      activatedAt: activationDate ?? (hasPendingMode ? null : saleDate),
       autoActivateDate,
     };
     const newSale: Sale = {
       id: saleId, clientId, type: 'subscription', itemId: planId, itemName: plan.name,
       price: plan.price, discount, finalPrice, paymentMethod,
-      date: fmt(new Date()), branchId: plan.branchId,
+      date: saleDate, branchId: plan.branchId,
       isFirstSubscription: isFirst, isReturn, isRenewal
     };
     update(s => ({
@@ -633,14 +684,17 @@ export function useStore() {
     }));
   };
 
-  const sellSingleVisit = (clientId: string, planId: string, paymentMethod: 'cash' | 'card') => {
+  const sellSingleVisit = (clientId: string, planId: string, paymentMethod: 'cash' | 'card', opts?: { discount?: number; saleDate?: string }) => {
     const plan = state.singleVisitPlans.find(p => p.id === planId);
     if (!plan) return;
     const saleId = genId();
+    const discount = opts?.discount ?? 0;
+    const saleDate = opts?.saleDate ?? fmt(new Date());
+    const finalPrice = Math.round(plan.price * (1 - discount / 100));
     const newSale: Sale = {
       id: saleId, clientId, type: 'single', itemId: planId, itemName: plan.name,
-      price: plan.price, discount: 0, finalPrice: plan.price, paymentMethod,
-      date: fmt(new Date()), branchId: plan.branchId,
+      price: plan.price, discount, finalPrice, paymentMethod,
+      date: saleDate, branchId: plan.branchId,
       isFirstSubscription: false, isReturn: false, isRenewal: false
     };
     update(s => ({ ...s, sales: [...s.sales, newSale] }));
@@ -884,6 +938,23 @@ export function useStore() {
     update(s => ({ ...s, expenseCategories: s.expenseCategories.filter(c => c.id !== id) }));
   };
 
+  // Notifications
+  const dismissNotification = (key: string) => {
+    update(s => ({ ...s, dismissedNotifications: [...s.dismissedNotifications.filter(k => k !== key), key] }));
+  };
+  const restoreNotification = (key: string) => {
+    update(s => ({ ...s, dismissedNotifications: s.dismissedNotifications.filter(k => k !== key) }));
+  };
+  const addNotificationCategory = (cat: Omit<NotificationCategory, 'id'>) => {
+    update(s => ({ ...s, notificationCategories: [...s.notificationCategories, { ...cat, id: genId() }] }));
+  };
+  const updateNotificationCategory = (id: string, data: Partial<NotificationCategory>) => {
+    update(s => ({ ...s, notificationCategories: s.notificationCategories.map(c => c.id === id ? { ...c, ...data } : c) }));
+  };
+  const removeNotificationCategory = (id: string) => {
+    update(s => ({ ...s, notificationCategories: s.notificationCategories.filter(c => c.id !== id) }));
+  };
+
   // Branches & Settings
   const addBranch = (branch: Omit<Branch, 'id'>) => {
     update(s => ({ ...s, branches: [...s.branches, { ...branch, id: genId() }] }));
@@ -1011,6 +1082,8 @@ export function useStore() {
     setSalesPlan, setMonthlyPlan, setExpensePlan,
     setCurrentBranch,
     getClientCategory, getClientFullName, findClientByPhone,
+    dismissNotification, restoreNotification,
+    addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
   };
 }
 
