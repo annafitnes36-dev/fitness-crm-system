@@ -58,6 +58,7 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (!store.dbLoaded) return; // Ждём загрузки из БД, чтобы не сбросить авторизацию раньше времени
     const savedStaffId = loadAuth();
     if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
       store.setCurrentStaff(savedStaffId);
@@ -66,7 +67,7 @@ export default function App() {
       clearAuth();
       setIsAuthenticated(false);
     }
-  }, [store.state.staff.length]);
+  }, [store.dbLoaded, store.state.staff.length]);
 
   // Автоматически активировать pending абонементы при загрузке
   useEffect(() => {

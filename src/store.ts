@@ -1547,10 +1547,18 @@ export function useStore() {
   // При первом запуске — пробуем загрузить из БД (приоритет над localStorage)
   useEffect(() => {
     if (dbLoaded) return;
+    // Запоминаем staff из localStorage ДО загрузки БД (там могут быть сотрудники из ?sl= ссылки)
+    const localStaff = loadState().staff;
     loadStateFromDb().then(dbState => {
       if (dbState) {
-        setState(dbState);
-        saveState(dbState); // синхронизируем localStorage
+        // Если в localStorage есть сотрудники которых нет в БД — сохраняем их (из ?sl= ссылки)
+        const dbStaffIds = new Set((dbState.staff || []).map((s: StaffMember) => s.id));
+        const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
+        const merged: AppState = extraStaff.length > 0
+          ? { ...dbState, staff: [...(dbState.staff || []), ...extraStaff] }
+          : dbState;
+        setState(merged);
+        saveState(merged);
       }
       setDbLoaded(true);
     });
@@ -2052,6 +2060,7 @@ export function useStore() {
 
   return {
     state,
+    dbLoaded,
     addClient, updateClient, addClientToBranch,
     sellSubscription, sellSingleVisit, sellExtra,
     freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription,
