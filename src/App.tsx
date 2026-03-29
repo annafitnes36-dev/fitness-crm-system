@@ -89,28 +89,7 @@ export default function App() {
   };
 
   if (!isAuthenticated) {
-    // Показываем страницу входа только если:
-    // 1. Открыта общая ссылка с правильным токеном (?access=TOKEN)
-    // 2. Уже есть сохранённая сессия (возврат после выхода)
-    // 3. Токен совпадает с сохранённым в store
-    const savedStaffId = loadAuth();
-    const hasSession = !!savedStaffId;
-    const validAccessToken = urlAccessToken && store.state.accessToken && urlAccessToken === store.state.accessToken;
-    if (hasSession || validAccessToken) {
-      return <Login store={store} onLogin={handleLogin} />;
-    }
-    // Без ссылки — заглушка
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center max-w-sm">
-          <div className="w-12 h-12 bg-foreground rounded-xl flex items-center justify-center mx-auto mb-4">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 text-white fill-none stroke-white stroke-2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          </div>
-          <h1 className="text-xl font-semibold mb-2">Рельеф-СРМ</h1>
-          <p className="text-sm text-muted-foreground">Для входа используйте ссылку, которую выдал руководитель.</p>
-        </div>
-      </div>
-    );
+    return <Login store={store} onLogin={handleLogin} />;
   }
 
   const renderPage = () => {
