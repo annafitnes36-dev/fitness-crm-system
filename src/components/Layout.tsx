@@ -73,9 +73,15 @@ function countNotifications(store: StoreType): number {
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
   const { state, setCurrentBranch } = store;
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
   const perms = currentStaff?.permissions;
+
+  // Только филиалы к которым у сотрудника есть доступ
+  const allowedBranches = currentStaff?.branchIds?.length
+    ? state.branches.filter(b => currentStaff.branchIds.includes(b.id))
+    : state.branches;
+
+  const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
   const notifCount = countNotifications(store);
 
   const navItems = perms
@@ -104,7 +110,7 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
           onChange={e => setCurrentBranch(e.target.value)}
           className="w-full text-xs text-muted-foreground bg-transparent border-none outline-none cursor-pointer mt-1"
         >
-          {state.branches.map(b => (
+          {allowedBranches.map(b => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>

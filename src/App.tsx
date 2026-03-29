@@ -76,6 +76,12 @@ export default function App() {
   const handleLogin = (staffId: string) => {
     store.setCurrentStaff(staffId);
     saveAuth(staffId);
+    // Переключаем на первый доступный филиал сотрудника
+    const member = store.state.staff.find(s => s.id === staffId);
+    if (member?.branchIds?.length) {
+      const hasAccess = member.branchIds.includes(store.state.currentBranchId);
+      if (!hasAccess) store.setCurrentBranch(member.branchIds[0]);
+    }
     setIsAuthenticated(true);
   };
 
