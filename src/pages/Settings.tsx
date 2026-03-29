@@ -580,7 +580,7 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                               <input
                                 type="number"
                                 min={0}
-                                className="w-full bg-white border-2 border-amber-400 rounded text-center text-xs font-semibold text-amber-900 focus:outline-none focus:border-amber-500 focus:bg-amber-50 py-1 placeholder:text-amber-300"
+                                className="w-full bg-white border border-amber-300 rounded text-center text-xs font-medium text-amber-900 focus:outline-none focus:border-amber-400 focus:bg-amber-50 py-1 placeholder:text-amber-200"
                                 value={manualVal}
                                 onChange={e => handleChange(month, row.key, e.target.value)}
                                 placeholder="—"

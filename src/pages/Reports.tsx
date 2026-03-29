@@ -210,7 +210,7 @@ function generateMonths(year: number): string[] {
 type ReportSection = 'planfact' | 'expenses' | 'sales';
 
 const REPORT_NAV: { id: ReportSection; label: string; icon: string }[] = [
-  { id: 'planfact', label: 'План / Факт', icon: 'BarChart2' },
+  { id: 'planfact', label: 'Общий', icon: 'BarChart2' },
   { id: 'expenses', label: 'Расходы', icon: 'Receipt' },
   { id: 'sales', label: 'Продажи', icon: 'ShoppingBag' },
 ];
@@ -811,76 +811,109 @@ export default function Reports({ store }: ReportsProps) {
         ))}
       </div>
 
-      {/* РАЗДЕЛ: ПЛАН / ФАКТ */}
+      {/* РАЗДЕЛ: ОБЩИЙ */}
       {activeSection === 'planfact' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded bg-blue-100 border border-blue-300" />
-              <span className="text-blue-700 font-medium">П</span> — план
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded bg-emerald-100 border border-emerald-300" />
-              <span className="text-emerald-700 font-medium">Ф</span> — факт
-            </span>
-            <span className="text-muted-foreground/70">Под фактом — % отклонения от плана</span>
-          </div>
+        <div className="space-y-6">
 
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b-2 border-border bg-secondary/60">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/60 min-w-[200px] z-10">Показатель</th>
-                    {months.map((month, i) => (
-                      <th key={month} className="px-0 py-0 text-center border-l border-border/40 min-w-[110px]">
-                        <div className="px-2 py-2 font-semibold">{MONTH_NAMES_SHORT[i]}</div>
-                        <div className="grid grid-cols-2 border-t border-border/30 text-[10px]">
-                          <div className="py-1 text-blue-600 font-semibold border-r border-border/30 bg-blue-50/60">П</div>
-                          <div className="py-1 text-emerald-600 font-semibold bg-emerald-50/60">Ф</div>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {COLUMNS.map((col, ri) => {
-                    const rowBg = ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20';
-                    const stickyBg = ri % 2 === 0 ? 'white' : 'rgb(248 248 248)';
-                    return (
-                      <tr key={col.key} className={`border-b border-border/40 ${rowBg}`}>
-                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-xs whitespace-nowrap" style={{ background: stickyBg }}>
-                          {col.label}
-                        </td>
+          {/* ТАБЛИЦА ПЛАН */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">План</h2>
+              <button onClick={() => exportPlanFact('plan')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+                <Icon name="Download" size={12} /> CSV
+              </button>
+            </div>
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-blue-50">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[200px] z-10">Показатель</th>
+                      {months.map((month, i) => (
+                        <th key={month} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px] border-l border-border/30">{MONTH_NAMES_SHORT[i]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COLUMNS.map((col, ri) => (
+                      <tr key={col.key} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground whitespace-nowrap" style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{col.label}</td>
                         {months.map(month => {
                           const planVal = plansMap[month]?.[col.key] as number | undefined;
-                          const factVal = factsMap[month]?.[col.key] as number;
-                          const d = diff(factVal, planVal);
                           return (
-                            <td key={month} className="px-0 py-0 border-l border-border/20">
-                              <div className="grid grid-cols-2">
-                                <div className="px-1.5 py-2 text-center text-blue-700 font-medium tabular-nums border-r border-border/20 bg-blue-50/20">
-                                  {planVal !== undefined && planVal !== 0 ? fmt(planVal, col.format) : <span className="text-muted-foreground/30">—</span>}
-                                </div>
-                                <div className="px-1.5 py-1.5 text-center bg-emerald-50/20">
-                                  <div className="text-emerald-700 font-medium tabular-nums">{factVal !== 0 ? fmt(factVal, col.format) : <span className="text-muted-foreground/30">—</span>}</div>
-                                  {d !== null && d.val !== 0 && (
-                                    <div className={`text-[10px] leading-tight ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                      {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                            <td key={month} className="px-3 py-2 text-center text-blue-700 tabular-nums border-l border-border/20">
+                              {planVal !== undefined && planVal !== 0 ? fmt(planVal, col.format) : <span className="text-muted-foreground/30">—</span>}
                             </td>
                           );
                         })}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                    <tr className="border-t-2 border-border bg-blue-50 font-semibold">
+                      <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
+                      {months.map(month => {
+                        const col = COLUMNS[0];
+                        return <td key={month} className="border-l border-border/20" />;
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+
+          {/* ТАБЛИЦА ФАКТ */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">Факт</h2>
+              <button onClick={() => exportPlanFact('fact')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
+                <Icon name="Download" size={12} /> CSV
+              </button>
+            </div>
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/50">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[200px] z-10">Показатель</th>
+                      {months.map((month, i) => (
+                        <th key={month} className="px-3 py-3 font-medium text-center whitespace-nowrap min-w-[80px] border-l border-border/30">{MONTH_NAMES_SHORT[i]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COLUMNS.map((col, ri) => (
+                      <tr key={col.key} className={`border-b border-border/50 ${ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
+                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground whitespace-nowrap" style={{ background: ri % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{col.label}</td>
+                        {months.map(month => {
+                          const factVal = factsMap[month]?.[col.key] as number;
+                          const planVal = plansMap[month]?.[col.key] as number | undefined;
+                          const d = diff(factVal, planVal);
+                          return (
+                            <td key={month} className="px-3 py-2 text-center border-l border-border/20">
+                              <div className="font-medium tabular-nums">{factVal !== 0 ? fmt(factVal, col.format) : <span className="text-muted-foreground/30">—</span>}</div>
+                              {d !== null && d.val !== 0 && (
+                                <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                      <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
+                      {months.map(month => {
+                        return <td key={month} className="border-l border-border/20" />;
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.</p>
+          </div>
+
           <CommentBox value={comments.planfact} onChange={v => setComments(c => ({ ...c, planfact: v }))} />
         </div>
       )}
