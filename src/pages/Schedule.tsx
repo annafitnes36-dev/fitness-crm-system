@@ -27,7 +27,7 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const NO_HALL_ID = '__no_hall__';
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
-  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch, sellExtra } = store;
+  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch, sellExtra, unfreezeSubscription } = store;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHallId, setSelectedHallId] = useState<string>(NO_HALL_ID);
@@ -285,7 +285,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     if (!entry || !client) return { subscriptions: [], singles: [] };
     const tt = state.trainingTypes.find(t => t.id === entry.trainingTypeId);
     const activeSubs = state.subscriptions.filter(s =>
-      s.clientId === clientId && (s.status === 'active' || s.status === 'pending') &&
+      s.clientId === clientId && (s.status === 'active' || s.status === 'pending' || s.status === 'frozen') &&
       (s.sessionsLeft === 'unlimited' || (s.sessionsLeft as number) > 0)
     ).filter(s => {
       const plan = state.subscriptionPlans.find(p => p.id === s.planId);
@@ -295,10 +295,8 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     const singles = state.singleVisitPlans.filter(p => {
       if (p.branchId !== state.currentBranchId) return false;
       if (tt && p.trainingTypeIds.length > 0 && !p.trainingTypeIds.includes(tt.id)) return false;
-      // Проверяем что по этому planId не исчерпаны все купленные разовые
       const purchasedCount = state.sales.filter(s => s.clientId === clientId && s.type === 'single' && s.itemId === p.id).length;
       const usedCount = state.visits.filter(v => v.clientId === clientId && v.isSingleVisit && v.status === 'attended' && v.price === p.price).length;
-      // Есть хотя бы одно неиспользованное
       return purchasedCount > usedCount;
     });
     return { subscriptions: activeSubs, singles };
@@ -696,26 +694,28 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                       onChange={e => setEnrollSearch(e.target.value)}
                       className="h-8 text-sm mt-2"
                     />
-                    <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                      {filteredClients.slice(0, 20).map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => enrollClientMaybeOtherBranch(selectedEntry.id, c.id)}
-                          className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-secondary transition-colors"
-                        >
-                          <span>{c.lastName} {c.firstName}</span>
-                          {c.isOtherBranch && (
-                            <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                              {state.branches.find(b => b.id === c.branchId)?.name}
-                            </span>
-                          )}
-                          <span className="text-muted-foreground ml-1">· {c.phone}</span>
-                        </button>
-                      ))}
-                      {filteredClients.length === 0 && enrollSearch && (
-                        <div className="text-xs text-muted-foreground px-2 py-2">Клиент не найден</div>
-                      )}
-                    </div>
+                    {enrollSearch.trim().length > 0 && (
+                      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                        {filteredClients.slice(0, 20).map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => enrollClientMaybeOtherBranch(selectedEntry.id, c.id)}
+                            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-secondary transition-colors"
+                          >
+                            <span>{c.lastName} {c.firstName}</span>
+                            {c.isOtherBranch && (
+                              <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                {state.branches.find(b => b.id === c.branchId)?.name}
+                              </span>
+                            )}
+                            <span className="text-muted-foreground ml-1">· {c.phone}</span>
+                          </button>
+                        ))}
+                        {filteredClients.length === 0 && (
+                          <div className="text-xs text-muted-foreground px-2 py-2">Клиент не найден</div>
+                        )}
+                      </div>
+                    )}
                     <button
                       onClick={() => {
                         const guestCount = (selectedEntry.guestCount || 0) + 1;
@@ -1009,22 +1009,42 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                 <div className="text-xs text-muted-foreground">Выберите основание для прохода:</div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {subscriptions.map(sub => (
-                    <label key={sub.id} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${selectedBasis?.type === 'subscription' && (selectedBasis as { type: 'subscription'; subId: string }).subId === sub.id ? 'border-foreground bg-secondary' : 'border-border hover:bg-secondary'}`}>
-                      <input type="radio" className="mt-0.5"
-                        checked={selectedBasis?.type === 'subscription' && (selectedBasis as { type: 'subscription'; subId: string }).subId === sub.id}
-                        onChange={() => setSelectedBasis({ type: 'subscription', subId: sub.id })} />
-                      <div>
-                        <div className="text-sm font-medium flex items-center gap-1.5">
-                          {sub.planName}
-                          {sub.status === 'pending' && (
-                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">активируется сейчас</span>
-                          )}
+                    <div key={sub.id} className={`p-2.5 rounded-lg border transition-colors ${sub.status === 'frozen' ? 'border-blue-200 bg-blue-50/50' : selectedBasis?.type === 'subscription' && (selectedBasis as { type: 'subscription'; subId: string }).subId === sub.id ? 'border-foreground bg-secondary' : 'border-border hover:bg-secondary'}`}>
+                      {sub.status === 'frozen' ? (
+                        <div>
+                          <div className="text-sm font-medium flex items-center gap-1.5">
+                            {sub.planName}
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">❄️ Заморожен до {sub.frozenTo}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            до {sub.endDate} · {sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}
+                          </div>
+                          <button
+                            onClick={() => { unfreezeSubscription(sub.id); setSelectedBasis({ type: 'subscription', subId: sub.id }); }}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          >
+                            Разморозить и использовать
+                          </button>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {sub.status === 'pending' ? `Начнёт действовать с сегодня · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}` : `до ${sub.endDate} · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}`}
-                        </div>
-                      </div>
-                    </label>
+                      ) : (
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="radio" className="mt-0.5"
+                            checked={selectedBasis?.type === 'subscription' && (selectedBasis as { type: 'subscription'; subId: string }).subId === sub.id}
+                            onChange={() => setSelectedBasis({ type: 'subscription', subId: sub.id })} />
+                          <div>
+                            <div className="text-sm font-medium flex items-center gap-1.5">
+                              {sub.planName}
+                              {sub.status === 'pending' && (
+                                <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">активируется сейчас</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {sub.status === 'pending' ? `Начнёт действовать с сегодня · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}` : `до ${sub.endDate} · ${sub.sessionsLeft === 'unlimited' ? '∞' : `ост. ${sub.sessionsLeft}`}`}
+                            </div>
+                          </div>
+                        </label>
+                      )}
+                    </div>
                   ))}
                   {singles.map(plan => (
                     <label key={plan.id} className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${selectedBasis?.type === 'single' && (selectedBasis as { type: 'single'; planId: string }).planId === plan.id ? 'border-foreground bg-secondary' : 'border-border hover:bg-secondary'}`}>

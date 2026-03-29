@@ -201,7 +201,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
           })}
         </div>
 
-        <div className="bg-white border border-border rounded-xl overflow-hidden flex-1">
+        <div className="bg-white border border-border rounded-xl overflow-hidden flex-1 overflow-y-auto">
           <table className="w-full data-table">
             <thead>
               <tr>
