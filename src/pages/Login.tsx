@@ -16,6 +16,16 @@ export default function Login({ store, onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState('');
+  const [showReset, setShowReset] = useState(false);
+
+  // Показываем подсказку о сбросе если ни у кого нет пароля
+  const hasAnyPassword = state.staff.some(m => m.password);
+
+  const handleReset = () => {
+    localStorage.removeItem('fitcrm_state_v1');
+    localStorage.removeItem('fitcrm_auth_v1');
+    window.location.reload();
+  };
 
   const handleSubmit = () => {
     if (!login || !password) { setError('Введите логин и пароль'); return; }
@@ -89,6 +99,37 @@ export default function Login({ store, onLogin }: LoginProps) {
             Логин — email сотрудника или установленный логин.<br />
             Пароль задаётся в разделе «Сотрудники».
           </p>
+
+          {!hasAnyPassword && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+              У всех сотрудников не задан пароль. Сбросьте данные до заводских — войдёте с логином <b>director</b> и паролем <b>1234</b>.
+              <button onClick={handleReset} className="block mt-2 w-full text-center bg-amber-600 text-white rounded-md py-1.5 font-medium hover:bg-amber-700 transition-colors">
+                Сбросить до заводских настроек
+              </button>
+            </div>
+          )}
+
+          {hasAnyPassword && (
+            <div className="pt-1 text-center">
+              {!showReset ? (
+                <button onClick={() => setShowReset(true)} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                  Забыли пароль?
+                </button>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
+                  Сброс удалит все данные и вернёт заводские настройки (логин <b>director</b>, пароль <b>1234</b>).
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => setShowReset(false)} className="flex-1 py-1.5 rounded-md border border-red-200 hover:bg-red-100 transition-colors">
+                      Отмена
+                    </button>
+                    <button onClick={handleReset} className="flex-1 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors font-medium">
+                      Сбросить
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
