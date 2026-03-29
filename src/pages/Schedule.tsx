@@ -63,7 +63,13 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
+  const toLocalDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const todayStr = toLocalDateStr(today);
 
   const getWeekDays = () => {
     const days: string[] = [];
@@ -74,7 +80,7 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      days.push(d.toISOString().split('T')[0]);
+      days.push(toLocalDateStr(d));
     }
     return days;
   };
