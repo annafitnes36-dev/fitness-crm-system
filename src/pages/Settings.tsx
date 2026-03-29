@@ -137,7 +137,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
     return tt?.extraPrice ?? 0;
   };
 
-  const renderSection = (title: string, items: typeof allItems) => (
+  const renderSection = (title: string, items: typeof allItems, showSum = false) => (
     <div>
       <h3 className="text-sm font-semibold mb-2 text-muted-foreground uppercase tracking-wide">{title}</h3>
       {items.length === 0 ? (
@@ -173,10 +173,23 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                     ))}
                   </tr>
                 ))}
-                {/* Итого кол-во по месяцу */}
+                {/* Итого */}
                 <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground text-xs" style={{ background: 'rgb(243 244 246)' }}>Итого, шт.</td>
+                  <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap text-muted-foreground text-xs" style={{ background: 'rgb(243 244 246)' }}>
+                    {showSum ? 'Итого, ₽' : 'Итого, шт.'}
+                  </td>
                   {months.map(month => {
+                    if (showSum) {
+                      const totalSum = items.reduce((sum, item) => {
+                        const qty = parseInt(values[month]?.[item.id] ?? '0') || 0;
+                        return sum + qty * getPlanPrice(item.id);
+                      }, 0);
+                      return (
+                        <td key={month} className="px-2 py-2 text-center text-xs font-semibold">
+                          {totalSum > 0 ? `${totalSum.toLocaleString()} ₽` : '—'}
+                        </td>
+                      );
+                    }
                     const total = items.reduce((sum, item) => sum + (parseInt(values[month]?.[item.id] ?? '0') || 0), 0);
                     return (
                       <td key={month} className="px-2 py-2 text-center text-xs font-semibold">
@@ -185,7 +198,8 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                     );
                   })}
                 </tr>
-                {/* Средний чек по месяцу */}
+                {/* Средний чек — только для абонементов */}
+                {!showSum && (
                 <tr className="border-t border-border/30 bg-secondary/20 text-muted-foreground text-xs">
                   <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(250 250 250)' }}>Средний чек</td>
                   {months.map(month => {
@@ -202,6 +216,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
                     );
                   })}
                 </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -229,8 +244,8 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
       </div>
       <p className="text-xs text-muted-foreground">Вводите плановое количество продаж по каждой позиции на каждый месяц.</p>
       {renderSection('Абонементы', subPlans.map(p => ({ ...p, kind: 'sub' as const })))}
-      {renderSection('Доп. продажи', addPlans.map(p => ({ ...p, kind: 'add' as const })))}
-      {renderSection('Доплаты (мини-группы, фан-группы)', extraItems.map(tt => ({ ...tt, kind: 'extra' as const })))}
+      {renderSection('Доп. продажи', addPlans.map(p => ({ ...p, kind: 'add' as const })), true)}
+      {renderSection('Доплаты (мини-группы, фан-группы)', extraItems.map(tt => ({ ...tt, kind: 'extra' as const })), true)}
     </div>
   );
 }
