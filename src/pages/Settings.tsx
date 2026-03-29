@@ -523,14 +523,14 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
         </Button>
       </div>
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded bg-amber-100 border border-amber-300" />
-          Вводится вручную
+      <div className="flex items-center gap-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+        <span className="flex items-center gap-2 font-medium text-amber-800">
+          <span className="inline-block w-4 h-4 rounded bg-amber-200 border-2 border-amber-400" />
+          Ячейки с оранжевой рамкой — вводятся вручную
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded bg-white border border-border" />
-          Рассчитывается автоматически
+        <span className="flex items-center gap-2 text-muted-foreground">
+          <span className="inline-block w-4 h-4 rounded bg-white border border-border" />
+          Белые — рассчитываются автоматически
         </span>
       </div>
 
@@ -538,12 +538,12 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-border bg-secondary/50">
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/50 min-w-[220px] z-10">
+              <tr className="border-b-2 border-border bg-secondary/60">
+                <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/60 min-w-[230px] z-10">
                   Показатель
                 </th>
                 {months.map((month, i) => (
-                  <th key={month} className="px-2 py-3 font-medium text-center whitespace-nowrap min-w-[80px] border-l border-border/30">
+                  <th key={month} className="px-2 py-3 font-semibold text-center whitespace-nowrap min-w-[82px] border-l border-border/40">
                     {MONTH_NAMES_SHORT[i]}
                   </th>
                 ))}
@@ -558,28 +558,29 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                   <Fragment key={row.key}>
                     {row.divider && (
                       <tr className="h-0">
-                        <td colSpan={13} className="p-0 border-t-2 border-border/60" />
+                        <td colSpan={13} className="p-0 border-t-2 border-border/50" />
                       </tr>
                     )}
-                    <tr className={`border-b border-border/40 ${rowBg}`}>
+                    <tr className={`border-b border-border/40 ${isManual ? 'bg-amber-50/60' : rowBg}`}>
                       <td
-                        className="px-4 py-1.5 sticky left-0 z-10 text-xs whitespace-nowrap"
-                        style={{ background: stickyBg }}
+                        className={`px-4 py-2 sticky left-0 z-10 text-xs whitespace-nowrap ${isManual ? 'font-semibold text-amber-900' : 'font-medium'}`}
+                        style={{ background: isManual ? 'rgb(255 251 235 / 0.9)' : stickyBg }}
                       >
-                        <span className="font-medium">{row.label}</span>
+                        {isManual && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 mb-0.5" />}
+                        {row.label}
                       </td>
                       {months.map(month => {
                         const vals = compute(month);
-                        const computed = vals[row.key] ?? 0;
+                        const computedVal = vals[row.key] ?? 0;
                         const manualVal = manual[month]?.[row.key] ?? '';
 
                         if (isManual) {
                           return (
-                            <td key={month} className="px-1 py-1 border-l border-border/20 bg-amber-50">
+                            <td key={month} className="px-1.5 py-1 border-l border-amber-200 bg-amber-50">
                               <input
                                 type="number"
                                 min={0}
-                                className="w-full bg-transparent text-center text-xs focus:outline-none focus:bg-amber-100 rounded py-0.5 placeholder:text-muted-foreground/40"
+                                className="w-full bg-white border-2 border-amber-400 rounded text-center text-xs font-semibold text-amber-900 focus:outline-none focus:border-amber-500 focus:bg-amber-50 py-1 placeholder:text-amber-300"
                                 value={manualVal}
                                 onChange={e => handleChange(month, row.key, e.target.value)}
                                 placeholder="—"
@@ -589,8 +590,8 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                         }
 
                         return (
-                          <td key={month} className="px-2 py-1.5 text-center border-l border-border/20 font-medium">
-                            {fmt(row, computed)}
+                          <td key={month} className="px-2 py-2 text-center border-l border-border/20 font-medium tabular-nums">
+                            {fmt(row, computedVal)}
                           </td>
                         );
                       })}
@@ -602,7 +603,7 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
           </table>
         </div>
         <div className="px-4 py-3 border-t border-border flex justify-between items-center bg-secondary/20">
-          <span className="text-xs text-muted-foreground">Жёлтые ячейки вводятся вручную — остальные считаются из плана продаж и плана расходов</span>
+          <span className="text-xs text-muted-foreground">Ячейки с оранжевой рамкой вводятся вручную — остальные считаются из плана продаж и плана расходов</span>
           <Button onClick={handleSaveAll} size="sm" className="bg-foreground text-primary-foreground hover:opacity-90">
             <Icon name="Save" size={13} className="mr-1" />
             Сохранить

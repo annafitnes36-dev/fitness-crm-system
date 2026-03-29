@@ -25,6 +25,7 @@ interface ReportsProps {
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTH_NAMES_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
 const COLUMNS: { key: keyof MonthlyPlanRow; label: string; format: 'money' | 'count' | 'pct' }[] = [
   { key: 'revenue', label: 'Выручка', format: 'money' },
@@ -64,26 +65,27 @@ function diff(fact: number | undefined, plan: number | undefined): { val: number
 
 function computeFact(
   branchIds: string[],
-  month: string, // YYYY-MM
+  month: string,
   state: StoreType['state']
 ): MonthlyPlanRow {
   const [year, mon] = month.split('-').map(Number);
-  const inMonth = (date: string) => {
-    const d = new Date(date);
-    return d.getFullYear() === year && d.getMonth() + 1 === mon;
-  };
-
+  const monthStart = `${year}-${String(mon).padStart(2, '0')}-01`;
+  const nextY = mon === 12 ? year + 1 : year;
+  const nextM = mon === 12 ? 1 : mon + 1;
+  const monthEnd = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+  const inMonth = (date: string) => date >= monthStart && date < monthEnd;
   const branchFilter = (bId: string) => branchIds.length === 0 || branchIds.includes(bId);
 
   // Продажи за месяц
   const monthSales = state.sales.filter(s => inMonth(s.date) && branchFilter(s.branchId));
   const subSales = monthSales.filter(s => s.type === 'subscription');
-  const singleSales = monthSales.filter(s => s.type === 'single');
+  const addSales = monthSales.filter(s => s.type === 'single' || s.type === 'extra');
 
   const revenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);
   const subscriptionSales = subSales.reduce((sum, s) => sum + s.finalPrice, 0);
-  const additionalSales = singleSales.reduce((sum, s) => sum + s.finalPrice, 0);
-  const avgCheck = monthSales.length > 0 ? revenue / monthSales.length : 0;
+  const additionalSales = addSales.reduce((sum, s) => sum + s.finalPrice, 0);
+  // Средний чек — только по абонементам
+  const avgCheck = subSales.length > 0 ? subscriptionSales / subSales.length : 0;
 
   // Расходы
   const expenses = state.expenses
@@ -93,75 +95,60 @@ function computeFact(
   const profit = revenue - expenses;
   const profitability = revenue > 0 ? (profit / revenue) * 100 : 0;
 
-  // Обращения
-  const inquiries = state.inquiries.filter(i => inMonth(i.date) && branchFilter(i.branchId)).length;
+  // Обращения = inquiry + новые клиенты (как на дашборде)
+  const monthInquiries = state.inquiries.filter(i => inMonth(i.date) && branchFilter(i.branchId)).length;
+  const newClients = state.clients.filter(c => branchFilter(c.branchId) && inMonth(c.createdAt)).length;
+  const inquiries = monthInquiries + newClients;
 
-  // Новички: клиенты, у которых первое посещение (тренировка) было в этом месяце
-  // Посещения за месяц со статусом attended
-  const monthVisits = state.visits.filter(v => {
-    if (v.status !== 'attended') return false;
-    if (!inMonth(v.date)) return false;
-    const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
-    return entry ? branchFilter(entry.branchId) : true;
-  });
-
-  // Все посещения клиентов (исторически), сортированные
+  // Все attended-визиты по клиентам (история)
+  const branchScheduleIds = new Set(
+    state.schedule.filter(e => branchFilter(e.branchId)).map(e => e.id)
+  );
   const allAttendedByClient: Record<string, string[]> = {};
-  state.visits.filter(v => v.status === 'attended').forEach(v => {
+  state.visits.filter(v => v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId)).forEach(v => {
     if (!allAttendedByClient[v.clientId]) allAttendedByClient[v.clientId] = [];
     allAttendedByClient[v.clientId].push(v.date);
   });
 
-  // Записи новичков: клиент записан (enrolled/attended) на пробную в этом месяце И это первая запись
+  // Записи новичков: записался в этом месяце, до этого ни разу не был
   const monthEnrolledVisits = state.visits.filter(v => {
-    if (!inMonth(v.date)) return false;
     if (!['attended', 'enrolled', 'missed'].includes(v.status)) return false;
-    const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
-    return entry ? branchFilter(entry.branchId) : false;
+    if (!inMonth(v.date)) return false;
+    return branchScheduleIds.has(v.scheduleEntryId);
   });
-
-  // Уникальные клиенты среди записей этого месяца, у которых до этого месяца не было посещений
-  const monthStart = new Date(year, mon - 1, 1).toISOString().split('T')[0];
-  const newbieEnrollmentClients = new Set<string>();
+  const newbieEnrollmentSet = new Set<string>();
   monthEnrolledVisits.forEach(v => {
-    const prevVisits = (allAttendedByClient[v.clientId] || []).filter(d => d < monthStart);
-    if (prevVisits.length === 0) newbieEnrollmentClients.add(v.clientId);
+    const prev = (allAttendedByClient[v.clientId] || []).filter(d => d < monthStart);
+    if (prev.length === 0) newbieEnrollmentSet.add(v.clientId);
   });
-  const newbieEnrollments = newbieEnrollmentClients.size;
+  const newbieEnrollments = newbieEnrollmentSet.size;
 
-  // Дошедших новичков: attended в этом месяце И первое посещение вообще в этом месяце
-  const newbieAttendedClients = new Set<string>();
-  monthVisits.forEach(v => {
-    const allDates = (allAttendedByClient[v.clientId] || []).sort();
-    if (allDates.length > 0 && inMonth(allDates[0])) {
-      newbieAttendedClients.add(v.clientId);
-    }
+  // Дошло новичков: первый attended-визит в жизни — в этом месяце
+  const newbieAttendedSet = new Set<string>();
+  state.visits.filter(v => v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId)).forEach(v => {
+    const all = (allAttendedByClient[v.clientId] || []).sort();
+    if (all.length > 0 && all[0] >= monthStart && all[0] < monthEnd) newbieAttendedSet.add(v.clientId);
   });
-  const newbieAttended = newbieAttendedClients.size;
+  const newbieAttended = newbieAttendedSet.size;
 
-  // Продажи новичкам: первая покупка абонемента в этом месяце
+  // Продажи новичкам: первая покупка абонемента
   const newbieSales = subSales.filter(s => s.isFirstSubscription).length;
 
-  // Конверсии
+  // Конверсии — автоматически в %
   const convInquiryToEnroll = inquiries > 0 ? (newbieEnrollments / inquiries) * 100 : 0;
   const convEnrollToAttend = newbieEnrollments > 0 ? (newbieAttended / newbieEnrollments) * 100 : 0;
   const convAttendToSale = newbieAttended > 0 ? (newbieSales / newbieAttended) * 100 : 0;
 
-  // Всего продаж абонементов
   const totalSubscriptionSales = subSales.length;
 
-  // Потенциал продлений: клиенты, у которых абонемент заканчивается в этом месяце
-  const monthEnd = new Date(year, mon, 0).toISOString().split('T')[0];
+  // Потенциал продлений: абонементы, срок которых закончился в этом месяце
   const renewalPotential = state.subscriptions.filter(s => {
     if (!branchFilter(s.branchId)) return false;
-    return s.endDate >= monthStart && s.endDate <= monthEnd;
+    return s.endDate >= monthStart && s.endDate < monthEnd;
   }).length;
 
-  // Продления: покупка абонемента повторно менее чем через 30 дней после предыдущего
   const renewals = subSales.filter(s => s.isRenewal).length;
   const convRenewal = renewalPotential > 0 ? (renewals / renewalPotential) * 100 : 0;
-
-  // Возвращения: покупка более чем через 30 дней после предыдущего абонемента
   const returns = subSales.filter(s => s.isReturn).length;
 
   return {
@@ -169,6 +156,47 @@ function computeFact(
     inquiries, newbieEnrollments, newbieAttended, newbieSales,
     convInquiryToEnroll, convEnrollToAttend, convAttendToSale,
     totalSubscriptionSales, renewalPotential, renewals, convRenewal, returns, profitability,
+  };
+}
+
+function computePlan(
+  branchId: string,
+  month: string,
+  state: StoreType['state']
+): Partial<MonthlyPlanRow> {
+  // Берём сохранённый план из раздела Планирование
+  const saved = state.monthlyPlans.find(p => p.branchId === branchId && p.month === month);
+  if (saved?.plan && Object.keys(saved.plan).length > 0) return saved.plan;
+
+  // Если нет сохранённого — вычисляем автоматически из плана продаж и плана расходов
+  const subPlans = state.subscriptionPlans.filter(p => p.branchId === branchId);
+  const addPlans = state.singleVisitPlans.filter(p => p.branchId === branchId);
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(branchId));
+  const branchCats = state.expenseCategories.filter(c => c.branchId === branchId);
+  const sp = state.salesPlans.find(p => p.branchId === branchId && p.month === month);
+
+  const subRevenue = subPlans.reduce((s, p) => s + (sp?.items.find(i => i.planId === p.id)?.target ?? 0) * p.price, 0);
+  const subQty = subPlans.reduce((s, p) => s + (sp?.items.find(i => i.planId === p.id)?.target ?? 0), 0);
+  const addRevenue = addPlans.reduce((s, p) => s + (sp?.items.find(i => i.planId === p.id)?.target ?? 0) * p.price, 0);
+  const extraRev = extraItems.reduce((s, tt) => s + (sp?.items.find(i => i.planId === tt.id)?.target ?? 0) * (tt.extraPrice ?? 0), 0);
+
+  const revenue = subRevenue + addRevenue + extraRev;
+  const expenses = branchCats.reduce((s, cat) => {
+    const ep = state.expensePlans.find((p: { branchId: string; month: string; categoryId: string; planAmount: number }) =>
+      p.branchId === branchId && p.month === month && p.categoryId === cat.id
+    );
+    return s + (ep?.planAmount ?? 0);
+  }, 0);
+  const profit = revenue - expenses;
+
+  return {
+    revenue,
+    expenses,
+    profit,
+    profitability: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
+    subscriptionSales: subRevenue,
+    additionalSales: addRevenue + extraRev,
+    avgCheck: subQty > 0 ? Math.round(subRevenue / subQty) : 0,
   };
 }
 
@@ -216,18 +244,12 @@ export default function Reports({ store }: ReportsProps) {
 
   const plansMap = useMemo(() => {
     const map: Record<string, Partial<MonthlyPlanRow>> = {};
+    const branchId = filterBranchIds[0] || state.currentBranchId;
     months.forEach(month => {
-      const found = state.monthlyPlans.find(
-        p => p.month === month && filterBranchIds.some(bid => p.branchId === bid)
-      ) || state.monthlyPlans.find(p => p.month === month && filterBranchIds.includes(p.branchId));
-      // Если несколько филиалов — берём первый найденный план для первого выбранного филиала
-      const planForBranch = filterBranchIds.length === 1
-        ? state.monthlyPlans.find(p => p.month === month && p.branchId === filterBranchIds[0])
-        : found;
-      map[month] = planForBranch?.plan || {};
+      map[month] = computePlan(branchId, month, state);
     });
     return map;
-  }, [months, filterBranchIds, state.monthlyPlans]);
+  }, [months, filterBranchIds, state]);
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
   const branchLabel = filterBranchIds.length === state.branches.length ? 'все филиалы'
@@ -791,129 +813,73 @@ export default function Reports({ store }: ReportsProps) {
 
       {/* РАЗДЕЛ: ПЛАН / ФАКТ */}
       {activeSection === 'planfact' && (
-        <div className="space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">План / Факт — план</h2>
-              <button onClick={() => exportPlanFact('plan')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-                <Icon name="Download" size={12} /> CSV
-              </button>
-            </div>
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-blue-50">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-blue-50 min-w-[110px] z-10">Месяц</th>
-                      {COLUMNS.map(col => (
-                        <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">{col.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {months.map((month, i) => (
-                      <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground" style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{MONTH_NAMES[i]}</td>
-                        {COLUMNS.map(col => {
-                          const planVal = plansMap[month]?.[col.key] as number | undefined;
-                          return (
-                            <td key={col.key} className="px-3 py-2 text-center text-blue-700">
-                              {planVal !== undefined ? fmt(planVal, col.format) : '—'}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                    <tr className="border-t-2 border-border bg-blue-50 font-semibold">
-                      <td className="px-4 py-2 sticky left-0 z-10 bg-blue-50 text-blue-900 whitespace-nowrap">Итого год</td>
-                      {COLUMNS.map(col => {
-                        const vals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
-                        const total = col.format === 'pct' || col.key === 'avgCheck'
-                          ? (vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined)
-                          : vals.reduce((a, b) => a + b, 0);
-                        return (
-                          <td key={col.key} className="px-3 py-2 text-center text-blue-900">
-                            {total !== undefined && !isNaN(total) && total !== 0 ? fmt(total, col.format) : '—'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded bg-blue-100 border border-blue-300" />
+              <span className="text-blue-700 font-medium">П</span> — план
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded bg-emerald-100 border border-emerald-300" />
+              <span className="text-emerald-700 font-medium">Ф</span> — факт
+            </span>
+            <span className="text-muted-foreground/70">Под фактом — % отклонения от плана</span>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">План / Факт — факт</h2>
-              <button onClick={() => exportPlanFact('fact')} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground hover:bg-secondary transition-colors">
-                <Icon name="Download" size={12} /> CSV
-              </button>
-            </div>
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-secondary/50">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-secondary/50 min-w-[110px] z-10">Месяц</th>
-                      {COLUMNS.map(col => (
-                        <th key={col.key} className="px-3 py-3 font-medium text-center min-w-[110px] whitespace-nowrap">{col.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b-2 border-border bg-secondary/60">
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground sticky left-0 bg-secondary/60 min-w-[200px] z-10">Показатель</th>
                     {months.map((month, i) => (
-                      <tr key={month} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-white' : 'bg-secondary/20'}`}>
-                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-muted-foreground" style={{ background: i % 2 === 0 ? 'white' : 'rgb(248 248 248)' }}>{MONTH_NAMES[i]}</td>
-                        {COLUMNS.map(col => {
-                          const factVal = factsMap[month]?.[col.key] as number | undefined;
+                      <th key={month} className="px-0 py-0 text-center border-l border-border/40 min-w-[110px]">
+                        <div className="px-2 py-2 font-semibold">{MONTH_NAMES_SHORT[i]}</div>
+                        <div className="grid grid-cols-2 border-t border-border/30 text-[10px]">
+                          <div className="py-1 text-blue-600 font-semibold border-r border-border/30 bg-blue-50/60">П</div>
+                          <div className="py-1 text-emerald-600 font-semibold bg-emerald-50/60">Ф</div>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COLUMNS.map((col, ri) => {
+                    const rowBg = ri % 2 === 0 ? 'bg-white' : 'bg-secondary/20';
+                    const stickyBg = ri % 2 === 0 ? 'white' : 'rgb(248 248 248)';
+                    return (
+                      <tr key={col.key} className={`border-b border-border/40 ${rowBg}`}>
+                        <td className="px-4 py-2 font-medium sticky left-0 z-10 text-xs whitespace-nowrap" style={{ background: stickyBg }}>
+                          {col.label}
+                        </td>
+                        {months.map(month => {
                           const planVal = plansMap[month]?.[col.key] as number | undefined;
+                          const factVal = factsMap[month]?.[col.key] as number;
                           const d = diff(factVal, planVal);
                           return (
-                            <td key={col.key} className="px-3 py-2 text-center">
-                              <div className="font-medium">{fmt(factVal, col.format)}</div>
-                              {d !== null && (
-                                <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                  {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                            <td key={month} className="px-0 py-0 border-l border-border/20">
+                              <div className="grid grid-cols-2">
+                                <div className="px-1.5 py-2 text-center text-blue-700 font-medium tabular-nums border-r border-border/20 bg-blue-50/20">
+                                  {planVal !== undefined && planVal !== 0 ? fmt(planVal, col.format) : <span className="text-muted-foreground/30">—</span>}
                                 </div>
-                              )}
+                                <div className="px-1.5 py-1.5 text-center bg-emerald-50/20">
+                                  <div className="text-emerald-700 font-medium tabular-nums">{factVal !== 0 ? fmt(factVal, col.format) : <span className="text-muted-foreground/30">—</span>}</div>
+                                  {d !== null && d.val !== 0 && (
+                                    <div className={`text-[10px] leading-tight ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                      {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </td>
                           );
                         })}
                       </tr>
-                    ))}
-                    <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                      <td className="px-4 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: 'rgb(243 244 246)' }}>Итого год</td>
-                      {COLUMNS.map(col => {
-                        const factVals = months.map(m => factsMap[m]?.[col.key] as number).filter(v => !isNaN(v));
-                        const planVals = months.map(m => plansMap[m]?.[col.key] as number | undefined).filter(v => v !== undefined) as number[];
-                        const factTotal = col.format === 'pct' || col.key === 'avgCheck'
-                          ? (factVals.length > 0 ? factVals.reduce((a, b) => a + b, 0) / factVals.length : 0)
-                          : factVals.reduce((a, b) => a + b, 0);
-                        const planTotal = col.format === 'pct' || col.key === 'avgCheck'
-                          ? (planVals.length > 0 ? planVals.reduce((a, b) => a + b, 0) / planVals.length : undefined)
-                          : planVals.reduce((a, b) => a + b, 0);
-                        const d = diff(factTotal, planTotal);
-                        return (
-                          <td key={col.key} className="px-3 py-2 text-center">
-                            <div>{fmt(factTotal, col.format)}</div>
-                            {d !== null && (
-                              <div className={`text-[10px] mt-0.5 ${d.val >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                {d.val >= 0 ? '+' : ''}{d.pct.toFixed(0)}%
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Под значением — % отклонения от плана. Зелёный = план выполнен, красный = не выполнен.
-            </p>
           </div>
           <CommentBox value={comments.planfact} onChange={v => setComments(c => ({ ...c, planfact: v }))} />
         </div>
