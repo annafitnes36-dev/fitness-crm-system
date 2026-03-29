@@ -92,7 +92,7 @@ const emptyForm = {
 };
 
 export default function Staff({ store }: StaffProps) {
-  const { state, addStaff, updateStaff, removeStaff } = store;
+  const { state, addStaff, updateStaff, removeStaff, generateInviteToken } = store;
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -102,6 +102,31 @@ export default function Staff({ store }: StaffProps) {
   const [passwordModalId, setPasswordModalId] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
   const [showPwd, setShowPwd] = useState(false);
+  const [inviteModalId, setInviteModalId] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const openInviteModal = (m: StaffMember) => {
+    const token = m.inviteToken ?? generateInviteToken(m.id);
+    const link = `${window.location.origin}${window.location.pathname}?invite=${token}`;
+    setInviteLink(link);
+    setInviteModalId(m.id);
+    setLinkCopied(false);
+  };
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
+  const regenerateLink = (staffId: string) => {
+    const token = generateInviteToken(staffId);
+    const link = `${window.location.origin}${window.location.pathname}?invite=${token}`;
+    setInviteLink(link);
+    setLinkCopied(false);
+  };
 
   const openAdd = () => {
     setEditingId(null);
@@ -217,6 +242,9 @@ export default function Staff({ store }: StaffProps) {
                 </td>
                 <td>
                   <div className="flex gap-1 justify-end">
+                    <button onClick={() => openInviteModal(m)} title="Ссылка для входа" className="p-1.5 rounded-lg hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors">
+                      <Icon name="Link2" size={13} />
+                    </button>
                     <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
                       <Icon name="Pencil" size={13} />
                     </button>
@@ -346,6 +374,46 @@ export default function Staff({ store }: StaffProps) {
               >
                 Сохранить пароль
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Invite link modal */}
+      {inviteModalId && (
+        <Dialog open={true} onOpenChange={() => setInviteModalId(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Ссылка для входа — {state.staff.find(m => m.id === inviteModalId)?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Отправьте эту ссылку сотруднику. По клику он автоматически войдёт в систему без пароля.
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground break-all font-mono">
+                  {inviteLink}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={copyInviteLink}
+                  className={`flex-1 ${linkCopied ? 'bg-emerald-500 hover:bg-emerald-500' : 'bg-foreground hover:opacity-90'} text-primary-foreground`}
+                >
+                  <Icon name={linkCopied ? 'Check' : 'Copy'} size={14} className="mr-1.5" />
+                  {linkCopied ? 'Скопировано!' : 'Скопировать'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => regenerateLink(inviteModalId)}
+                  title="Сгенерировать новую ссылку (старая перестанет работать)"
+                >
+                  <Icon name="RefreshCw" size={14} />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Кнопка <Icon name="RefreshCw" size={11} className="inline" /> сбросит старую ссылку и создаст новую.
+              </p>
             </div>
           </DialogContent>
         </Dialog>

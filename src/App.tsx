@@ -43,6 +43,20 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Обработка инвайт-ссылки: ?invite=TOKEN
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get('invite');
+    if (inviteToken) {
+      const member = store.state.staff.find(m => m.inviteToken === inviteToken);
+      if (member) {
+        store.setCurrentStaff(member.id);
+        saveAuth(member.id);
+        setIsAuthenticated(true);
+        // Убираем токен из URL без перезагрузки
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+    }
     const savedStaffId = loadAuth();
     if (savedStaffId && store.state.staff.find(s => s.id === savedStaffId)) {
       store.setCurrentStaff(savedStaffId);

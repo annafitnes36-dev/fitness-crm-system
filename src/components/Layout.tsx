@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Icon from '@/components/ui/icon';
 import { StoreType, ROLE_LABELS, Permission } from '@/store';
 
@@ -27,10 +28,13 @@ const ALL_NAV_ITEMS = [
   { id: 'settings', label: 'Настройки', icon: 'Settings', permKey: 'menuSettings' as keyof Permission },
 ];
 
+// Bottom nav — самые частые действия
+const BOTTOM_NAV_KEYS = ['dashboard', 'clients', 'schedule', 'notifications', 'sales'];
+
 function countNotifications(store: StoreType): number {
   const { state } = store;
   const today = new Date();
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const todayStr = fmt(today);
   const tomorrowStr = fmt(new Date(today.getTime() + 86400000));
   const yesterdayStr = fmt(new Date(today.getTime() - 86400000));
@@ -68,6 +72,7 @@ function countNotifications(store: StoreType): number {
 
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
   const { state, setCurrentBranch } = store;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const currentBranch = state.branches.find(b => b.id === state.currentBranchId);
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
   const perms = currentStaff?.permissions;
@@ -77,96 +82,205 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
     ? ALL_NAV_ITEMS.filter(item => perms[item.permKey] !== false)
     : ALL_NAV_ITEMS;
 
+  const bottomNavItems = navItems.filter(item => BOTTOM_NAV_KEYS.includes(item.id));
+
+  const handleNavigate = (id: string) => {
+    onNavigate(id);
+    setSidebarOpen(false);
+  };
+
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div className="px-4 py-5 border-b border-border">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
+            <Icon name="Dumbbell" size={14} className="text-primary-foreground" />
+          </div>
+          <span className="font-semibold text-sm tracking-tight">Рельеф-СРМ</span>
+        </div>
+        <select
+          value={state.currentBranchId}
+          onChange={e => setCurrentBranch(e.target.value)}
+          className="w-full text-xs text-muted-foreground bg-transparent border-none outline-none cursor-pointer mt-1"
+        >
+          {state.branches.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            onClick={() => handleNavigate(item.id)}
+            className={`nav-item w-full text-left ${activePage === item.id ? 'active' : ''}`}
+          >
+            <Icon name={item.icon} size={16} className="shrink-0" />
+            {item.label}
+            {item.id === 'notifications' && notifCount > 0 && (
+              <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {notifCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Action buttons */}
+      <div className="p-3 border-t border-border space-y-2">
+        <button
+          onClick={() => { onSell(); setSidebarOpen(false); }}
+          className="w-full flex items-center justify-center gap-2 bg-foreground text-primary-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:opacity-90 transition-opacity"
+        >
+          <Icon name="Plus" size={15} />
+          Продать
+        </button>
+        <button
+          onClick={() => { onInquiry(); setSidebarOpen(false); }}
+          className="w-full flex items-center justify-center gap-2 bg-secondary text-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-secondary/70 transition-colors border border-border"
+        >
+          <Icon name="PhoneIncoming" size={15} />
+          Обращение
+        </button>
+        <button
+          onClick={() => { onExpense(); setSidebarOpen(false); }}
+          className="w-full flex items-center justify-center gap-2 bg-secondary text-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-secondary/70 transition-colors border border-border"
+        >
+          <Icon name="TrendingDown" size={15} />
+          Расход
+        </button>
+      </div>
+
+      {/* Staff / Logout */}
+      <div className="p-3 border-t border-border">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center shrink-0">
+            <Icon name="User" size={12} />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium text-foreground truncate">{currentStaff?.name ?? '—'}</div>
+            <div className="truncate">{ROLE_LABELS[currentStaff?.role ?? 'admin']}</div>
+          </div>
+        </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-secondary transition-colors"
+          >
+            <Icon name="LogOut" size={13} />
+            Выйти
+          </button>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-56 bg-white border-r border-border flex flex-col shrink-0">
-        <div className="px-4 py-5 border-b border-border">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
-              <Icon name="Dumbbell" size={14} className="text-primary-foreground" />
-            </div>
-            <span className="font-semibold text-sm tracking-tight">Рельеф-СРМ</span>
-          </div>
-          <select
-            value={state.currentBranchId}
-            onChange={e => setCurrentBranch(e.target.value)}
-            className="w-full text-xs text-muted-foreground bg-transparent border-none outline-none cursor-pointer mt-1"
-          >
-            {state.branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-56 bg-white border-r border-border flex-col shrink-0">
+        {sidebarContent}
+      </aside>
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`nav-item w-full text-left ${activePage === item.id ? 'active' : ''}`}
-            >
-              <Icon name={item.icon} size={16} className="shrink-0" />
-              {item.label}
-              {item.id === 'notifications' && notifCount > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {notifCount}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-        <div className="p-3 border-t border-border space-y-2">
-          <button
-            onClick={onSell}
-            className="w-full flex items-center justify-center gap-2 bg-foreground text-primary-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:opacity-90 transition-opacity"
-          >
-            <Icon name="Plus" size={15} />
-            Продать
-          </button>
-          <button
-            onClick={onInquiry}
-            className="w-full flex items-center justify-center gap-2 bg-secondary text-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-secondary/70 transition-colors border border-border"
-          >
-            <Icon name="PhoneIncoming" size={15} />
-            Обращение
-          </button>
-          <button
-            onClick={onExpense}
-            className="w-full flex items-center justify-center gap-2 bg-secondary text-foreground text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-secondary/70 transition-colors border border-border"
-          >
-            <Icon name="TrendingDown" size={15} />
-            Расход
-          </button>
-        </div>
+      {/* Mobile drawer */}
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 z-50 bg-white border-r border-border flex flex-col transition-transform duration-300 md:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        {sidebarContent}
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
-          <h1 className="text-base font-semibold">
-            {ALL_NAV_ITEMS.find(n => n.id === activePage)?.label ?? activePage}
-          </h1>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>{currentBranch?.name}</span>
-            <div className="flex items-center gap-2 bg-secondary rounded-lg px-2 py-1">
-              <Icon name="User" size={13} />
-              <span className="text-xs font-medium text-foreground">
-                {currentStaff ? `${currentStaff.name.split(' ').slice(0, 2).join(' ')} (${ROLE_LABELS[currentStaff.role]})` : '—'}
-              </span>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Header */}
+        <header className="bg-white border-b border-border px-3 md:px-6 py-3 md:py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Burger — mobile only */}
+            <button
+              className="md:hidden p-1.5 rounded-md hover:bg-secondary transition-colors"
+              onClick={() => setSidebarOpen(v => !v)}
+            >
+              <Icon name="Menu" size={20} />
+            </button>
+            <h1 className="text-sm md:text-base font-semibold truncate">
+              {ALL_NAV_ITEMS.find(n => n.id === activePage)?.label ?? activePage}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2 md:gap-3 text-xs md:text-sm text-muted-foreground">
+            <span className="hidden sm:block truncate max-w-[120px]">{currentBranch?.name}</span>
+            {/* Quick actions — mobile */}
+            <button
+              onClick={onSell}
+              className="md:hidden flex items-center gap-1 bg-foreground text-primary-foreground text-xs font-medium px-2.5 py-1.5 rounded-lg"
+            >
+              <Icon name="Plus" size={13} />
+              Продать
+            </button>
+            {/* Desktop staff info */}
+            <div className="hidden md:flex items-center gap-2">
+              <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center">
+                <Icon name="User" size={12} />
+              </div>
+              <span className="text-xs font-medium text-foreground">{currentStaff?.name ?? '—'}</span>
+              <span className="text-xs text-muted-foreground">· {ROLE_LABELS[currentStaff?.role ?? 'admin']}</span>
             </div>
             {onLogout && (
-              <button onClick={onLogout} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg hover:bg-secondary">
+              <button
+                onClick={onLogout}
+                className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-secondary transition-colors"
+              >
                 <Icon name="LogOut" size={13} />
                 Выйти
               </button>
             )}
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-6">
+
+        {/* Page content */}
+        <div className="flex-1 overflow-auto pb-16 md:pb-0">
           {children}
         </div>
+
+        {/* Bottom navigation — mobile only */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-border flex items-stretch">
+          {bottomNavItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => handleNavigate(item.id)}
+              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] transition-colors relative ${
+                activePage === item.id
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon name={item.icon} size={18} />
+              <span>{item.label}</span>
+              {item.id === 'notifications' && notifCount > 0 && (
+                <span className="absolute top-1.5 right-[calc(50%-14px)] bg-red-500 text-white text-[9px] font-bold px-1 py-px rounded-full min-w-[14px] text-center leading-tight">
+                  {notifCount}
+                </span>
+              )}
+            </button>
+          ))}
+          {/* More button */}
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Icon name="Menu" size={18} />
+            <span>Ещё</span>
+          </button>
+        </nav>
       </main>
     </div>
   );
