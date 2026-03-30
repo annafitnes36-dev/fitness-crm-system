@@ -150,6 +150,16 @@ export default function Login({ store, onLogin }: LoginProps) {
               <p className="text-xs text-center text-muted-foreground pt-1">
                 Логин и пароль задаются в разделе «Сотрудники»
               </p>
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  window.location.reload();
+                }}
+                className="w-full text-xs text-muted-foreground underline pt-1"
+              >
+                Не получается войти? Сбросить данные
+              </button>
             </>
           )}
         </div>
