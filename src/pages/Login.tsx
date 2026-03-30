@@ -35,7 +35,12 @@ export default function Login({ store, onLogin }: LoginProps) {
       const loginMatch = m.login ? m.login === login : m.email === login;
       return loginMatch && m.password === password;
     });
-    if (!member) { setError('Неверный логин или пароль'); return; }
+    if (!member) {
+      // Показываем диагностику — какие логины/пароли реально есть
+      const hint = state.staff.map(m => `${m.name}: логин="${m.login || m.email}" пароль="${m.password || '(нет)'}"`).join('\n');
+      setError(`Неверный логин или пароль.\n\nДиагностика:\n${hint}`);
+      return;
+    }
     setError('');
     onLogin(member.id);
   };
@@ -132,10 +137,9 @@ export default function Login({ store, onLogin }: LoginProps) {
               </div>
 
               {error && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <Icon name="AlertCircle" size={13} />
+                <pre className="text-xs text-red-500 whitespace-pre-wrap bg-red-50 rounded-lg p-2 border border-red-200">
                   {error}
-                </p>
+                </pre>
               )}
 
               <Button
