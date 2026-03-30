@@ -61,12 +61,16 @@ export default function App() {
   useEffect(() => {
     const savedStaffId = loadAuth();
     if (!savedStaffId) return;
-    if (store.state.staff.find(s => s.id === savedStaffId)) {
+    const found = store.state.staff.find(s => s.id === savedStaffId);
+    if (found) {
       store.setCurrentStaff(savedStaffId);
       setIsAuthenticated(true);
+    } else if (store.dbLoaded) {
+      // Только сбрасываем если БД уже загружена и сотрудника нет
+      clearAuth();
+      setIsAuthenticated(false);
     }
-    // Не сбрасываем авторизацию — staff может ещё не загрузиться из БД
-  }, [store.state.staff.length]);
+  }, [store.state.staff.length, store.dbLoaded]);
 
   // Автоматически активировать pending абонементы при загрузке
   useEffect(() => {
