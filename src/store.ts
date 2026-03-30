@@ -1576,12 +1576,25 @@ export function useStore() {
     const localStaff = loadState().staff;
     loadStateFromDb().then(dbState => {
       if (dbState) {
+        // Переносим пароли/логины из localStaff в dbStaff (они могут не сохраниться в БД)
+        const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
+        const mergedStaff = (dbState.staff || []).map((s: StaffMember) => {
+          const local = localStaffMap.get(s.id);
+          if (!local) return s;
+          return {
+            ...s,
+            password: s.password || local.password,
+            login: s.login || local.login,
+          };
+        });
         // Если в localStorage есть сотрудники которых нет в БД — сохраняем их (из ?sl= ссылки)
-        const dbStaffIds = new Set((dbState.staff || []).map((s: StaffMember) => s.id));
+        const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
-        const merged: AppState = extraStaff.length > 0
-          ? { ...dbState, staff: [...(dbState.staff || []), ...extraStaff] }
-          : dbState;
+        const merged: AppState = {
+          ...dbState,
+          staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+          shifts: dbState.shifts || [],
+        };
         setState(merged);
         saveState(merged);
       }
