@@ -31,6 +31,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const [freezeDays, setFreezeDays] = useState(7);
   const [extendDays, setExtendDays] = useState(0);
   const [extendSessions, setExtendSessions] = useState(0);
+  const [extendTargetDate, setExtendTargetDate] = useState('');
   const [showEnroll, setShowEnroll] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -106,17 +107,24 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
 
   const handleExtend = () => {
     if (!sub) return;
-    const addDays = (d: string, n: number) => {
+    const addDaysToDate = (d: string, n: number) => {
       const dt = new Date(d);
       dt.setDate(dt.getDate() + n);
       return dt.toISOString().split('T')[0];
     };
     const updates: Partial<typeof sub> = {};
-    if (extendDays > 0) updates.endDate = addDays(sub.endDate, extendDays);
+    if (extendTargetDate) {
+      updates.endDate = extendTargetDate;
+    } else if (extendDays > 0) {
+      updates.endDate = addDaysToDate(sub.endDate, extendDays);
+    }
     if (extendSessions > 0 && sub.sessionsLeft !== 'unlimited') {
       updates.sessionsLeft = (sub.sessionsLeft as number) + extendSessions;
     }
     updateSubscription(sub.id, updates);
+    setExtendDays(0);
+    setExtendTargetDate('');
+    setExtendSessions(0);
     setShowExtend(false);
   };
 
@@ -271,8 +279,11 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               <div className="bg-secondary rounded-xl p-3">
                 <div className="font-medium text-sm">{sub.planName}</div>
                 <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
-                  <div>Куплен: {sub.purchaseDate}</div>
-                  <div>До: {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU') : ''}</div>
+                  <div>Куплен: {sub.purchaseDate ? new Date(sub.purchaseDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
+                  <div>До: {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
+                  {sub.activatedAt && (
+                    <div className="col-span-2">Активирован: {new Date(sub.activatedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                  )}
                   <div>
                     Занятий: {sub.sessionsLeft === 'unlimited' ? '∞' : sub.sessionsLeft}
                   </div>
@@ -383,21 +394,47 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
       </Dialog>
 
       {/* Extend modal */}
-      <Dialog open={showExtend} onOpenChange={setShowExtend}>
+      <Dialog open={showExtend} onOpenChange={v => { setShowExtend(v); if (!v) { setExtendDays(0); setExtendTargetDate(''); setExtendSessions(0); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Изменить срок / лимит</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {sub && (
+              <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2">
+                Текущая дата окончания: <span className="font-medium text-foreground">{sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</span>
+              </div>
+            )}
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Добавить дней</Label>
-              <Input type="number" value={extendDays} min={0} onChange={e => setExtendDays(Number(e.target.value))} />
+              <Input
+                type="number"
+                value={extendDays || ''}
+                min={0}
+                placeholder="0"
+                disabled={!!extendTargetDate}
+                onChange={e => setExtendDays(Number(e.target.value))}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex-1 h-px bg-border" />
+              <span>или укажите дату напрямую</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Итоговая дата окончания</Label>
+              <Input
+                type="date"
+                value={extendTargetDate}
+                disabled={extendDays > 0}
+                onChange={e => setExtendTargetDate(e.target.value)}
+              />
             </div>
             {sub && sub.sessionsLeft !== 'unlimited' && (
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">Добавить занятий</Label>
-                <Input type="number" value={extendSessions} min={0} onChange={e => setExtendSessions(Number(e.target.value))} />
+                <Input type="number" value={extendSessions || ''} min={0} placeholder="0" onChange={e => setExtendSessions(Number(e.target.value))} />
               </div>
             )}
-            <Button onClick={handleExtend} className="w-full bg-foreground text-primary-foreground">Применить</Button>
+            <Button onClick={handleExtend} disabled={!extendDays && !extendTargetDate && !extendSessions} className="w-full bg-foreground text-primary-foreground">Применить</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -229,7 +229,7 @@ export default function Clients({ store, onSell }: ClientsProps) {
                       {sub ? (
                         <div>
                           <div className="font-medium text-green-700">{sub.planName}</div>
-                          <div className="text-xs text-muted-foreground">до {sub.endDate}</div>
+                          <div className="text-xs text-muted-foreground">до {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</div>
                         </div>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
