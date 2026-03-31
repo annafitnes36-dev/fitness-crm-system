@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { StoreType } from '@/store';
+import { StoreType, Client, Inquiry } from '@/store';
 import Icon from '@/components/ui/icon';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface DashboardProps {
   store: StoreType;
@@ -132,6 +133,78 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const convEnrollToAttend = firstEnrollmentsCount > 0 ? Math.round((attendedNewbiesCount / firstEnrollmentsCount) * 100) : null;
   const convAttendToBuy = attendedNewbiesCount > 0 ? Math.round((firstTimeSubs / attendedNewbiesCount) * 100) : null;
 
+  // Данные для детализации карточек
+  const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+  const clientName = (c: Client) => [c.lastName, c.firstName].filter(Boolean).join(' ') || c.phone || '—';
+
+  const detailInquiries: { title: string; rows: { name: string; sub: string }[] } = {
+    title: 'Обращения',
+    rows: [
+      ...state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).map((i: Inquiry) => ({
+        name: i.name || '—',
+        sub: `${fmtDate(i.date)} · ${i.source || 'источник не указан'}`,
+      })),
+      ...branchClients.filter(c => inPeriod(c.createdAt)).map(c => ({
+        name: clientName(c),
+        sub: `${fmtDate(c.createdAt)} · регистрация клиента`,
+      })),
+    ],
+  };
+
+  const detailFirstEnrollments: { title: string; rows: { name: string; sub: string }[] } = {
+    title: 'Записи на пробную тренировку',
+    rows: Array.from(firstEnrollments).map(clientId => {
+      const c = state.clients.find(cl => cl.id === clientId);
+      const visit = state.visits.find(v => branchScheduleIds.has(v.scheduleEntryId) && v.clientId === clientId && inPeriod(v.date));
+      const entry = visit ? state.schedule.find(e => e.id === visit.scheduleEntryId) : null;
+      const tt = entry ? state.trainingTypes.find(t => t.id === entry.trainingTypeId) : null;
+      return {
+        name: c ? clientName(c) : clientId,
+        sub: `${visit ? fmtDate(visit.date) : '—'}${tt ? ' · ' + tt.name : ''}`,
+      };
+    }),
+  };
+
+  const detailAttendedNewbies: { title: string; rows: { name: string; sub: string }[] } = {
+    title: 'Дошли новички (первый визит)',
+    rows: Array.from(attendedNewbies).map(clientId => {
+      const c = state.clients.find(cl => cl.id === clientId);
+      const dates = branchAttendedByClient[clientId] || [];
+      const firstDate = [...dates].sort()[0];
+      return {
+        name: c ? clientName(c) : clientId,
+        sub: firstDate ? fmtDate(firstDate) : '—',
+      };
+    }),
+  };
+
+  const firstTimeSubSales = monthSubSales.filter(s => s.isFirstSubscription);
+  const detailFirstTimeSubs: { title: string; rows: { name: string; sub: string }[] } = {
+    title: 'Купили абонемент (новички)',
+    rows: firstTimeSubSales.map(s => {
+      const c = state.clients.find(cl => cl.id === s.clientId);
+      return {
+        name: c ? clientName(c) : '—',
+        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽`,
+      };
+    }),
+  };
+
+  const detailTotalSubs: { title: string; rows: { name: string; sub: string }[] } = {
+    title: 'Все продажи абонементов',
+    rows: monthSubSales.map(s => {
+      const c = state.clients.find(cl => cl.id === s.clientId);
+      const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возврат' : '';
+      return {
+        name: c ? clientName(c) : '—',
+        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽${tag ? ' · ' + tag : ''}`,
+      };
+    }),
+  };
+
+  type DetailData = typeof detailInquiries;
+  const [activeDetail, setActiveDetail] = useState<DetailData | null>(null);
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Period selector */}
@@ -156,13 +229,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       {/* Key stats */}
       <div className="grid grid-cols-6 gap-4">
         {[
-          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600', conv: convInquiryToEnroll !== null ? `→ запись ${convInquiryToEnroll}%` : null },
-          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500', conv: convEnrollToAttend !== null ? `→ дошло ${convEnrollToAttend}%` : null },
-          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500', conv: convAttendToBuy !== null ? `→ купило ${convAttendToBuy}%` : null },
-          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600', conv: null },
-          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground', conv: null },
+          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600', conv: convInquiryToEnroll !== null ? `→ запись ${convInquiryToEnroll}%` : null, detail: detailInquiries },
+          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500', conv: convEnrollToAttend !== null ? `→ дошло ${convEnrollToAttend}%` : null, detail: detailFirstEnrollments },
+          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500', conv: convAttendToBuy !== null ? `→ купило ${convAttendToBuy}%` : null, detail: detailAttendedNewbies },
+          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600', conv: null, detail: detailFirstTimeSubs },
+          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground', conv: null, detail: detailTotalSubs },
         ].map((s, i) => (
-          <div key={i} className="stat-card">
+          <button key={i} className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer" onClick={() => setActiveDetail(s.detail)}>
             <div className="flex items-start justify-between mb-3">
               <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">{s.label}</span>
               <Icon name={s.icon} size={16} className={s.color} />
@@ -170,7 +243,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             <div className="text-2xl font-semibold">{s.value}</div>
             <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>
             {s.conv && <div className="text-[10px] text-muted-foreground/70 mt-0.5 font-medium">{s.conv}</div>}
-          </div>
+          </button>
         ))}
         {/* Средний чек */}
         <div className="stat-card">
@@ -397,6 +470,31 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         </table>
         {recentSales.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">Продаж пока нет</div>}
       </div>
+
+      {/* Detail modal */}
+      <Dialog open={!!activeDetail} onOpenChange={v => { if (!v) setActiveDetail(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{activeDetail?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            {activeDetail?.rows.length === 0 && (
+              <div className="py-10 text-center text-sm text-muted-foreground">Нет данных за выбранный период</div>
+            )}
+            <div className="divide-y divide-border">
+              {activeDetail?.rows.map((row, i) => (
+                <div key={i} className="py-2.5">
+                  <div className="text-sm font-medium">{row.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="pt-2 border-t border-border text-xs text-muted-foreground">
+            Всего: {activeDetail?.rows.length ?? 0}
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
