@@ -2407,8 +2407,8 @@ function loadState(): AppState {
 // URL бэкенда — заполняется после деплоя
 const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE_URL__'] || '';
 
-async function saveStateToDb(s: AppState) {
-  if (!CRM_STATE_URL) return;
+async function saveStateToDb(s: AppState): Promise<boolean> {
+  if (!CRM_STATE_URL) return true;
   try {
     // Исключаем импортированных клиентов (dashboardExclude) из сохранения в БД —
     // они переимпортируются автоматически при загрузке и экономят место
@@ -2416,12 +2416,13 @@ async function saveStateToDb(s: AppState) {
       ...s,
       clients: s.clients.filter(c => !c.dashboardExclude),
     };
-    await fetch(`${CRM_STATE_URL}?action=state`, {
+    const res = await fetch(`${CRM_STATE_URL}?action=state`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: stateForDb }),
     });
-  } catch { /* ignore */ }
+    return res.ok;
+  } catch { return false; }
 }
 
 export async function loadStateFromDb(): Promise<AppState | null> {
@@ -2454,7 +2455,7 @@ export async function regenerateAccessToken(): Promise<string> {
   } catch { return ''; }
 }
 
-function saveState(s: AppState) {
+function saveState(s: AppState, onSync?: (ok: boolean) => void) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch (e) {
@@ -2464,7 +2465,11 @@ function saveState(s: AppState) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
     } catch { /* ignore */ }
   }
-  saveStateToDb(s);
+  if (onSync) {
+    saveStateToDb(s).then(ok => onSync(ok));
+  } else {
+    saveStateToDb(s);
+  }
 }
 
 // Генерирует ссылку со списком сотрудников (логин+пароль) в base64
@@ -2503,9 +2508,12 @@ export function clearAuth() {
   try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
 }
 
+export type SyncStatus = 'idle' | 'syncing' | 'saved' | 'error';
+
 export function useStore() {
   const [state, setState] = useState<AppState>(() => loadState());
   const [dbLoaded, setDbLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
   // При первом запуске — пробуем загрузить из БД (приоритет над localStorage)
   useEffect(() => {
@@ -2532,8 +2540,9 @@ export function useStore() {
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
 
         // Мёрджим записи которые могут быть в localStorage но ещё не в БД
+        // Импортированных клиентов (dashboardExclude) не берём — они переимпортируются автоматически
         const dbClientIds = new Set((dbState.clients || []).map((c: Client) => c.id));
-        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id));
+        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id) && !c.dashboardExclude);
         const dbExpenseIds = new Set((dbState.expenses || []).map((e: Expense) => e.id));
         const extraExpenses = (localState.expenses || []).filter(e => !dbExpenseIds.has(e.id));
         const dbCashOpIds = new Set((dbState.cashOperations || []).map((o: CashOperation) => o.id));
@@ -2636,7 +2645,8 @@ export function useStore() {
   const update = useCallback((updater: (s: AppState) => AppState) => {
     setState(prev => {
       const next = updater(prev);
-      saveState(next);
+      setSyncStatus('syncing');
+      saveState(next, (ok) => setSyncStatus(ok ? 'saved' : 'error'));
       return next;
     });
   }, []);
@@ -3245,6 +3255,7 @@ export function useStore() {
   return {
     state,
     dbLoaded,
+    syncStatus,
     addClient, updateClient, addClientToBranch,
     sellSubscription, sellSingleVisit, sellExtra,
     freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
-import { StoreType, ROLE_LABELS, Permission, Shift } from '@/store';
+import { StoreType, SyncStatus, ROLE_LABELS, Permission, Shift } from '@/store';
 import ShiftReport from '@/components/ShiftReport';
 
 interface LayoutProps {
@@ -70,6 +70,43 @@ function countNotifications(store: StoreType): number {
     }
   }
   return count;
+}
+
+function SyncIndicator({ status }: { status: SyncStatus }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (status === 'syncing' || status === 'error') {
+      setVisible(true);
+    } else if (status === 'saved') {
+      setVisible(true);
+      const t = setTimeout(() => setVisible(false), 3000);
+      return () => clearTimeout(t);
+    } else {
+      setVisible(false);
+    }
+  }, [status]);
+
+  if (!visible) return null;
+  if (status === 'syncing') return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+      <span className="hidden sm:inline">Сохранение...</span>
+    </span>
+  );
+  if (status === 'saved') return (
+    <span className="flex items-center gap-1 text-xs text-emerald-600">
+      <Icon name="Check" size={12} />
+      <span className="hidden sm:inline">Сохранено</span>
+    </span>
+  );
+  if (status === 'error') return (
+    <span className="flex items-center gap-1 text-xs text-red-500" title="Нет связи с сервером. Данные в браузере.">
+      <Icon name="WifiOff" size={12} />
+      <span className="hidden sm:inline">Нет связи</span>
+    </span>
+  );
+  return null;
 }
 
 export default function Layout({ children, activePage, onNavigate, store, onSell, onInquiry, onExpense, onLogout }: LayoutProps) {
@@ -261,6 +298,7 @@ export default function Layout({ children, activePage, onNavigate, store, onSell
             </h1>
           </div>
           <div className="flex items-center gap-2 md:gap-3 text-xs md:text-sm text-muted-foreground">
+            <SyncIndicator status={store.syncStatus} />
             <span className="hidden sm:block truncate max-w-[120px]">{currentBranch?.name}</span>
             {/* Quick actions — mobile */}
             <button
