@@ -1,4 +1,5 @@
 {
+  "dedup-clients": "https://functions.poehali.dev/c52c400e-baa0-4067-8ddb-44730bf37897",
   "fetch-olimp": "https://functions.poehali.dev/e5bb11ad-c525-44f8-9cc7-a8989208fc4a",
   "crm-state": "https://functions.poehali.dev/60dc6321-6b85-4f85-a51b-344cadfa8ef9"
 }

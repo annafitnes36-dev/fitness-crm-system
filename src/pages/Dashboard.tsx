@@ -372,11 +372,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         </div>
         <table className="w-full data-table">
           <thead>
-            <tr><th>Клиент</th><th>Товар</th><th>Тип</th><th>Оплата</th><th>Сумма</th><th>Дата</th></tr>
+            <tr><th>Клиент</th><th>Товар</th><th>Тип</th><th>Оплата</th><th>Сумма</th><th>Сотрудник</th><th>Дата</th></tr>
           </thead>
           <tbody>
             {recentSales.map(sale => {
               const client = state.clients.find(c => c.id === sale.clientId);
+              const staff = sale.staffId ? state.staff.find(s => s.id === sale.staffId) : null;
+              const staffShort = staff ? staff.name.split(' ').slice(0, 2).join(' ') : '—';
               return (
                 <tr key={sale.id}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
@@ -388,7 +390,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
                   </td>
                   <td className="text-muted-foreground">{sale.paymentMethod === 'cash' ? 'Нал' : 'Безнал'}</td>
                   <td className="font-medium">{sale.finalPrice.toLocaleString()} ₽</td>
-                  <td className="text-muted-foreground">{sale.date}</td>
+                  <td className="text-muted-foreground text-sm">{staffShort}</td>
+                  <td className="text-muted-foreground">{sale.date ? new Date(sale.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                 </tr>
               );
             })}

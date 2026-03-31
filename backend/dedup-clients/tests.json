@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "Preview dedup",
+      "method": "POST",
+      "path": "/?action=preview",
+      "body": {"branchIds": ["b_cvetnoi", "n8yopzru"]},
+      "expectedStatus": 200,
+      "expectedBody": {"dupe_groups": 0, "to_delete": 0},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
