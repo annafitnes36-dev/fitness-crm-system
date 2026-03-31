@@ -2759,6 +2759,17 @@ export function useStore() {
     update(s => ({ ...s, clients: s.clients.map(c => c.id === id ? { ...c, ...data } : c) }));
   };
 
+  const deleteClient = (id: string) => {
+    update(s => ({
+      ...s,
+      clients: s.clients.filter(c => c.id !== id),
+      subscriptions: s.subscriptions.filter(sub => sub.clientId !== id),
+      sales: s.sales.filter(sale => sale.clientId !== id),
+      visits: s.visits.filter(v => v.clientId !== id),
+      bonusTransactions: s.bonusTransactions.filter(bt => bt.clientId !== id),
+    }));
+  };
+
   // Sales & Subscriptions
   const sellSubscription = (
     clientId: string, planId: string, discount: number, paymentMethod: 'cash' | 'card' | 'bonus',
@@ -3362,7 +3373,7 @@ export function useStore() {
     state,
     dbLoaded,
     syncStatus,
-    addClient, updateClient, addClientToBranch,
+    addClient, updateClient, deleteClient, addClientToBranch,
     sellSubscription, sellSingleVisit, sellExtra,
     freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription,
     addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,

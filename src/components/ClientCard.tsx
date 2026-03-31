@@ -23,7 +23,7 @@ const CHANNEL_ICONS: Record<string, string> = {
 };
 
 export default function ClientCard({ client, store, onClose, onSell }: ClientCardProps) {
-  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient, getClientBonusBalance } = store;
+  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient, deleteClient, getClientBonusBalance } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
@@ -33,6 +33,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const [extendSessions, setExtendSessions] = useState(0);
   const [showEnroll, setShowEnroll] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: client.firstName, lastName: client.lastName, middleName: client.middleName,
     phone: client.phone, contactChannel: client.contactChannel,
@@ -184,6 +185,9 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
         <div className="flex items-center gap-1">
           <button onClick={() => setShowEdit(true)} className="text-muted-foreground hover:text-foreground p-1" title="Редактировать">
             <Icon name="Pencil" size={15} />
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)} className="text-muted-foreground hover:text-destructive p-1" title="Удалить клиента">
+            <Icon name="Trash2" size={15} />
           </button>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <Icon name="X" size={16} />
@@ -504,6 +508,27 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="text-destructive">Удалить клиента?</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Клиент <span className="font-semibold text-foreground">{getClientFullName(client)}</span> и все связанные данные (абонементы, посещения, продажи) будут удалены без возможности восстановления.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setShowDeleteConfirm(false)}>Отмена</Button>
+              <Button
+                className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => { deleteClient(client.id); setShowDeleteConfirm(false); onClose(); }}
+              >
+                Удалить
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
