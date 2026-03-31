@@ -1,0 +1,12 @@
+{
+  "tests": [
+    {
+      "name": "Preview sale branch fixes",
+      "method": "GET",
+      "path": "/?action=preview",
+      "expectedStatus": 200,
+      "expectedBody": {"total_fixes": 0},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

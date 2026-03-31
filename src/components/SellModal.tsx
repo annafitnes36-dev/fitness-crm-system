@@ -17,7 +17,7 @@ const fmt = (d: Date) => d.toISOString().split('T')[0];
 
 export default function SellModal({ open, onClose, store, preselectedClientId }: SellModalProps) {
   const { state, sellSubscription, sellSingleVisit, getClientFullName, addClientToBranch, getClientBonusBalance } = store;
-  const [step, setStep] = useState<'client' | 'product'>('client');
+  const [step, setStep] = useState<'client' | 'product'>(preselectedClientId ? 'product' : 'client');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClientId, setSelectedClientId] = useState(preselectedClientId || '');
   const [selectedType, setSelectedType] = useState<'subscription' | 'single'>('subscription');
@@ -69,6 +69,19 @@ export default function SellModal({ open, onClose, store, preselectedClientId }:
     ? state.subscriptionPlans.find(p => p.id === selectedItemId)
     : null;
   const hasSessionsLimit = selectedPlan && selectedPlan.sessionsLimit !== 'unlimited';
+
+  // Когда модал открывается с предвыбранным клиентом — сразу шаг product
+  useEffect(() => {
+    if (open) {
+      if (preselectedClientId) {
+        setSelectedClientId(preselectedClientId);
+        setStep('product');
+      } else {
+        setStep('client');
+        setSelectedClientId('');
+      }
+    }
+  }, [open, preselectedClientId]);
 
   // При смене клиента — сбросить бонус
   useEffect(() => {

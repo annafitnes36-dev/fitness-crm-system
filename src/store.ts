@@ -3138,6 +3138,17 @@ export function useStore() {
     update(s => ({ ...s, inquiries: [...s.inquiries, { ...inquiry, id: genId() }] }));
   };
 
+  const deleteInquiry = (id: string) => {
+    update(s => ({ ...s, inquiries: s.inquiries.filter(i => i.id !== id) }));
+  };
+
+  const deleteSale = (id: string) => {
+    update(s => ({
+      ...s,
+      sales: s.sales.filter(sale => sale.id !== id),
+    }));
+  };
+
   const addContactChannel = (channel: string) => {
     update(s => ({ ...s, contactChannels: [...s.contactChannels, channel] }));
   };
@@ -3427,7 +3438,7 @@ export function useStore() {
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
     addStaff, updateStaff, removeStaff, setCurrentStaff, generateInviteToken,
-    addInquiry,
+    addInquiry, deleteInquiry, deleteSale,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, updateExpense, deleteExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,

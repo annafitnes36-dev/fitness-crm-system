@@ -28,7 +28,7 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
-  const { state, getClientCategory } = store;
+  const { state, getClientCategory, deleteInquiry, deleteSale, deleteClient } = store;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -137,21 +137,31 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const clientName = (c: Client) => [c.lastName, c.firstName].filter(Boolean).join(' ') || c.phone || '—';
 
-  const detailInquiries: { title: string; rows: { name: string; sub: string }[] } = {
+  const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
+  const canDelete = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+
+  type DetailRow = { name: string; sub: string; id: string; deleteType: 'inquiry' | 'sale' | 'client' | null };
+  type DetailData = { title: string; rows: DetailRow[] };
+
+  const detailInquiries: DetailData = {
     title: 'Обращения',
     rows: [
       ...state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).map((i: Inquiry) => ({
         name: i.name || '—',
         sub: `${fmtDate(i.date)} · ${i.source || 'источник не указан'}`,
+        id: i.id,
+        deleteType: 'inquiry' as const,
       })),
       ...branchClients.filter(c => inPeriod(c.createdAt)).map(c => ({
         name: clientName(c),
         sub: `${fmtDate(c.createdAt)} · регистрация клиента`,
+        id: c.id,
+        deleteType: 'client' as const,
       })),
     ],
   };
 
-  const detailFirstEnrollments: { title: string; rows: { name: string; sub: string }[] } = {
+  const detailFirstEnrollments: DetailData = {
     title: 'Записи на пробную тренировку',
     rows: Array.from(firstEnrollments).map(clientId => {
       const c = state.clients.find(cl => cl.id === clientId);
@@ -161,11 +171,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       return {
         name: c ? clientName(c) : clientId,
         sub: `${visit ? fmtDate(visit.date) : '—'}${tt ? ' · ' + tt.name : ''}`,
+        id: clientId,
+        deleteType: null,
       };
     }),
   };
 
-  const detailAttendedNewbies: { title: string; rows: { name: string; sub: string }[] } = {
+  const detailAttendedNewbies: DetailData = {
     title: 'Дошли новички (первый визит)',
     rows: Array.from(attendedNewbies).map(clientId => {
       const c = state.clients.find(cl => cl.id === clientId);
@@ -174,23 +186,27 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       return {
         name: c ? clientName(c) : clientId,
         sub: firstDate ? fmtDate(firstDate) : '—',
+        id: clientId,
+        deleteType: null,
       };
     }),
   };
 
   const firstTimeSubSales = monthSubSales.filter(s => s.isFirstSubscription);
-  const detailFirstTimeSubs: { title: string; rows: { name: string; sub: string }[] } = {
+  const detailFirstTimeSubs: DetailData = {
     title: 'Купили абонемент (новички)',
     rows: firstTimeSubSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
       return {
         name: c ? clientName(c) : '—',
         sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽`,
+        id: s.id,
+        deleteType: 'sale' as const,
       };
     }),
   };
 
-  const detailTotalSubs: { title: string; rows: { name: string; sub: string }[] } = {
+  const detailTotalSubs: DetailData = {
     title: 'Все продажи абонементов',
     rows: monthSubSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
@@ -198,12 +214,30 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       return {
         name: c ? clientName(c) : '—',
         sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽${tag ? ' · ' + tag : ''}`,
+        id: s.id,
+        deleteType: 'sale' as const,
       };
     }),
   };
 
-  type DetailData = typeof detailInquiries;
-  const [activeDetail, setActiveDetail] = useState<DetailData | null>(null);
+  type DetailKey = 'inquiries' | 'firstEnrollments' | 'attendedNewbies' | 'firstTimeSubs' | 'totalSubs';
+  const [activeDetailKey, setActiveDetailKey] = useState<DetailKey | null>(null);
+
+  const detailMap: Record<DetailKey, DetailData> = {
+    inquiries: detailInquiries,
+    firstEnrollments: detailFirstEnrollments,
+    attendedNewbies: detailAttendedNewbies,
+    firstTimeSubs: detailFirstTimeSubs,
+    totalSubs: detailTotalSubs,
+  };
+  const activeDetail = activeDetailKey ? detailMap[activeDetailKey] : null;
+
+  const handleDeleteRow = (row: DetailRow) => {
+    if (!row.deleteType) return;
+    if (row.deleteType === 'inquiry') deleteInquiry(row.id);
+    else if (row.deleteType === 'sale') deleteSale(row.id);
+    else if (row.deleteType === 'client') deleteClient(row.id);
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -229,13 +263,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       {/* Key stats */}
       <div className="grid grid-cols-6 gap-4">
         {[
-          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600', conv: convInquiryToEnroll !== null ? `→ запись ${convInquiryToEnroll}%` : null, detail: detailInquiries },
-          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500', conv: convEnrollToAttend !== null ? `→ дошло ${convEnrollToAttend}%` : null, detail: detailFirstEnrollments },
-          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500', conv: convAttendToBuy !== null ? `→ купило ${convAttendToBuy}%` : null, detail: detailAttendedNewbies },
-          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600', conv: null, detail: detailFirstTimeSubs },
-          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground', conv: null, detail: detailTotalSubs },
+          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600', conv: convInquiryToEnroll !== null ? `→ запись ${convInquiryToEnroll}%` : null, detailKey: 'inquiries' as DetailKey },
+          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500', conv: convEnrollToAttend !== null ? `→ дошло ${convEnrollToAttend}%` : null, detailKey: 'firstEnrollments' as DetailKey },
+          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500', conv: convAttendToBuy !== null ? `→ купило ${convAttendToBuy}%` : null, detailKey: 'attendedNewbies' as DetailKey },
+          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600', conv: null, detailKey: 'firstTimeSubs' as DetailKey },
+          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubs} · возвр. ${returnSubs}`, icon: 'CreditCard', color: 'text-foreground', conv: null, detailKey: 'totalSubs' as DetailKey },
         ].map((s, i) => (
-          <button key={i} className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer" onClick={() => setActiveDetail(s.detail)}>
+          <button key={i} className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer" onClick={() => setActiveDetailKey(s.detailKey)}>
             <div className="flex items-start justify-between mb-3">
               <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">{s.label}</span>
               <Icon name={s.icon} size={16} className={s.color} />
@@ -472,7 +506,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       </div>
 
       {/* Detail modal */}
-      <Dialog open={!!activeDetail} onOpenChange={v => { if (!v) setActiveDetail(null); }}>
+      <Dialog open={!!activeDetailKey} onOpenChange={v => { if (!v) setActiveDetailKey(null); }}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{activeDetail?.title}</DialogTitle>
@@ -483,9 +517,20 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             )}
             <div className="divide-y divide-border">
               {activeDetail?.rows.map((row, i) => (
-                <div key={i} className="py-2.5">
-                  <div className="text-sm font-medium">{row.name}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
+                <div key={i} className="py-2.5 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{row.name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
+                  </div>
+                  {canDelete && row.deleteType && (
+                    <button
+                      onClick={() => handleDeleteRow(row)}
+                      className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1 rounded"
+                      title="Удалить"
+                    >
+                      <Icon name="Trash2" size={14} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
