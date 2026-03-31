@@ -2502,7 +2502,7 @@ export async function loadStateFromDb(): Promise<AppState | null> {
   if (!CRM_STATE_URL) return null;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(`${CRM_STATE_URL}?action=state`, { signal: controller.signal });
     clearTimeout(timer);
     const json = await res.json();
@@ -2636,7 +2636,8 @@ export function useStore() {
           merged.importedBorV1 = true;
         }
         setState(merged);
-        // НЕ вызываем saveState(merged) — localStorage уже актуален и не надо его перезаписывать данными из БД
+        // Сохраняем в localStorage чтобы следующий запуск был быстрее
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
       }
       setDbLoaded(true);
     });

@@ -99,6 +99,17 @@ export default function App() {
     setShowSell(true);
   };
 
+  if (!store.dbLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="text-sm text-muted-foreground">Загрузка данных...</div>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <Login store={store} onLogin={handleLogin} />;
   }
