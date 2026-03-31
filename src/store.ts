@@ -2495,7 +2495,8 @@ function saveStateToDb(s: AppState, onSync?: (ok: boolean) => void): void {
   _pendingState = s;
   if (onSync) _pendingOnSync = onSync;
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => { _saveTimer = null; flushToDb(); }, 300);
+  // Сохраняем немедленно — без debounce
+  _saveTimer = setTimeout(() => { _saveTimer = null; flushToDb(); }, 0);
 }
 
 export async function loadStateFromDb(): Promise<AppState | null> {
@@ -2590,6 +2591,8 @@ export function useStore() {
     const localStaff = localState.staff;
 
     const applyDbState = (dbState: AppState) => {
+      // БД — единственный источник правды. Берём всё из БД.
+      // Только staff мёрджим (чтобы не потерять локальные пароли если они не были сохранены)
       const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
       const mergedStaff = dbState.staff.map((s: StaffMember) => {
         const local = localStaffMap.get(s.id);
@@ -2598,33 +2601,15 @@ export function useStore() {
       });
       const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
       const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
-      const mergeById = <T extends { id: string }>(dbItems: T[], localItems: T[]) => {
-        const dbIds = new Set(dbItems.map(i => i.id));
-        const extra = localItems.filter(i => !dbIds.has(i.id));
-        return extra.length > 0 ? [...dbItems, ...extra] : dbItems;
-      };
-      const mergedDeletedIds = Array.from(new Set([
-        ...(localState.deletedClientIds || []),
-        ...(dbState.deletedClientIds || []),
-      ]));
       let merged: AppState = {
         ...dbState,
         staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-        clients: mergeById(dbState.clients || [], localState.clients || []).filter((c: Client) => !mergedDeletedIds.includes(c.id)),
-        sales: mergeById(dbState.sales || [], localState.sales || []),
-        subscriptions: mergeById(dbState.subscriptions || [], localState.subscriptions || []),
-        schedule: mergeById(dbState.schedule || [], localState.schedule || []),
-        visits: mergeById(dbState.visits || [], localState.visits || []),
-        expenses: mergeById(dbState.expenses || [], localState.expenses || []),
-        cashOperations: mergeById(dbState.cashOperations || [], localState.cashOperations || []),
-        shifts: mergeById(dbState.shifts || [], localState.shifts || []),
-        bonusTransactions: mergeById(dbState.bonusTransactions || [], localState.bonusTransactions || []),
-        bonusSettings: dbState.bonusSettings || localState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
-        deletedClientIds: mergedDeletedIds,
       };
       if (!merged.importedBorV1) { merged = applyBorImport(merged); merged.importedBorV1 = true; }
       setState(merged);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+      // Сразу сохраняем мёрдж обратно в БД чтобы закрепить
+      _lastSavedState = merged;
     };
 
     // Пробуем загрузить с ретраями (до 5 попыток с задержкой)
@@ -2648,7 +2633,30 @@ export function useStore() {
     tryLoad();
   }, []);
 
-  // Периодическое обновление данных с сервера (polling каждые 30 сек)
+  // Принудительное сохранение при закрытии вкладки (защита от потери данных)
+  useEffect(() => {
+    if (!dbLoaded) return;
+    const handleBeforeUnload = () => {
+      if (_pendingState && CRM_STATE_URL) {
+        const patch: Partial<AppState> = {};
+        for (const key of PATCH_KEYS) {
+          if (!_lastSavedState || _pendingState[key] !== _lastSavedState[key]) {
+            (patch as Record<string, unknown>)[key] = _pendingState[key];
+          }
+        }
+        if (Object.keys(patch).length > 0) {
+          navigator.sendBeacon(
+            `${CRM_STATE_URL}?action=patch`,
+            new Blob([JSON.stringify({ patch })], { type: 'application/json' })
+          );
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [dbLoaded]);
+
+  // Периодическое обновление данных с сервера (polling каждые 5 сек)
   useEffect(() => {
     if (!dbLoaded) return;
     if (!CRM_STATE_URL) return;
@@ -2658,13 +2666,9 @@ export function useStore() {
       if (!dbState || !Array.isArray(dbState.staff) || dbState.staff.length === 0) return;
       setState(cur => {
         const mergeByIdUpdating = <T extends { id: string }>(dbItems: T[], curItems: T[]): T[] => {
-          const curMap = new Map(curItems.map(i => [i.id, i]));
+          // БД — источник правды. Локальные записи добавляем только если их нет в БД (ещё не сохранились)
           const dbMap = new Map(dbItems.map(i => [i.id, i]));
-          const result: T[] = dbItems.map(dbItem => {
-            const curItem = curMap.get(dbItem.id);
-            if (!curItem) return dbItem;
-            return curItem;
-          });
+          const result: T[] = [...dbItems];
           curItems.forEach(ci => { if (!dbMap.has(ci.id)) result.push(ci); });
           return result;
         };
@@ -2698,7 +2702,7 @@ export function useStore() {
           currentBranchId: cur.currentBranchId,
         };
       });
-    }, 30000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [dbLoaded]);
 
