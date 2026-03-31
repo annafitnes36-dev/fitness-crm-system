@@ -207,7 +207,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                 <div className="font-medium text-sm">{sub.planName}</div>
                 <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
                   <div>Куплен: {sub.purchaseDate}</div>
-                  <div>До: {sub.endDate}</div>
+                  <div>До: {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU') : ''}</div>
                   <div>
                     Занятий: {sub.sessionsLeft === 'unlimited' ? '∞' : sub.sessionsLeft}
                   </div>
