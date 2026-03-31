@@ -154,9 +154,10 @@ export interface Sale {
   isFirstSubscription: boolean;
   isReturn: boolean;
   isRenewal: boolean;
-  bonusUsed?: number;       // сколько бонусов списано
-  bonusAccrued?: number;    // сколько бонусов начислено
-  bonusPaymentMethod?: 'cash' | 'card'; // способ оплаты остатка если бонусов не хватило
+  bonusUsed?: number;
+  bonusAccrued?: number;
+  bonusPaymentMethod?: 'cash' | 'card';
+  staffId?: string;
 }
 
 export interface BonusTransaction {
@@ -542,6 +543,7 @@ export interface AppState {
   shifts: Shift[];
   bonusSettings: BonusSettings;
   bonusTransactions: BonusTransaction[];
+  deletedClientIds: string[];
 }
 
 const defaultStaff: StaffMember[] = [
@@ -597,6 +599,7 @@ const initialState: AppState = {
   shifts: [],
   bonusSettings: { enabled: false, accrualPercent: 5, expiryDays: 365 },
   bonusTransactions: [],
+  deletedClientIds: [],
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -2339,9 +2342,22 @@ function loadState(): AppState {
         extraPriceName: tt.extraPriceName ?? null,
         ...tt,
       }));
+      const deletedClientIds: string[] = parsed.deletedClientIds ?? [];
+      // Восстанавливаем activeSubscriptionId у клиентов по истории продаж и подписок
+      const parsedClients: Client[] = (parsed.clients || []).map((c: Client) => {
+        if (c.activeSubscriptionId) return c;
+        // ищем последнюю активную/pending подписку клиента
+        const clientSubs: Subscription[] = (parsed.subscriptions || []).filter(
+          (s: Subscription) => s.clientId === c.id && (s.status === 'active' || s.status === 'pending' || s.status === 'frozen')
+        );
+        if (clientSubs.length === 0) return c;
+        const latest = clientSubs.sort((a: Subscription, b: Subscription) => b.purchaseDate.localeCompare(a.purchaseDate))[0];
+        return { ...c, activeSubscriptionId: latest.id };
+      });
       const base: AppState = {
         ...initialState,
         ...parsed,
+        clients: parsedClients,
         subscriptions,
         subscriptionPlans,
         singleVisitPlans,
@@ -2350,6 +2366,7 @@ function loadState(): AppState {
         dismissedNotifications: parsed.dismissedNotifications ?? [],
         failedNotifications: parsed.failedNotifications ?? {},
         notificationCategories: parsed.notificationCategories ?? DEFAULT_NOTIFICATION_CATEGORIES,
+        deletedClientIds,
       };
       // Миграция: импорт базы клиентов Цветной (v2 — полная база)
       if (!base.importedCvetnoiV2) {
@@ -2592,11 +2609,16 @@ export function useStore() {
           const extra = localItems.filter(i => !dbIds.has(i.id));
           return extra.length > 0 ? [...dbItems, ...extra] : dbItems;
         };
+        // Объединяем списки удалённых клиентов из обоих источников
+        const mergedDeletedIds = Array.from(new Set([
+          ...(localState.deletedClientIds || []),
+          ...(dbState.deletedClientIds || []),
+        ]));
 
         let merged: AppState = {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-          clients: mergeById(dbState.clients || [], localState.clients || []),
+          clients: mergeById(dbState.clients || [], localState.clients || []).filter((c: Client) => !mergedDeletedIds.includes(c.id)),
           sales: mergeById(dbState.sales || [], localState.sales || []),
           subscriptions: mergeById(dbState.subscriptions || [], localState.subscriptions || []),
           schedule: mergeById(dbState.schedule || [], localState.schedule || []),
@@ -2606,6 +2628,7 @@ export function useStore() {
           shifts: mergeById(dbState.shifts || [], localState.shifts || []),
           bonusTransactions: mergeById(dbState.bonusTransactions || [], localState.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || localState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
+          deletedClientIds: mergedDeletedIds,
         };
         // Применяем импорт Бор если ещё не применён
         if (!merged.importedBorV1) {
@@ -2647,10 +2670,15 @@ export function useStore() {
         });
         const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
         const extraStaff = cur.staff.filter(s => !dbStaffIds.has(s.id));
+        const pollingDeletedIds = new Set([
+          ...(cur.deletedClientIds || []),
+          ...(dbState.deletedClientIds || []),
+        ]);
         return {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-          clients: mergeByIdUpdating(dbState.clients || [], cur.clients || []),
+          clients: mergeByIdUpdating(dbState.clients || [], cur.clients || []).filter((c: Client) => !pollingDeletedIds.has(c.id)),
+          deletedClientIds: Array.from(pollingDeletedIds),
           sales: mergeByIdUpdating(dbState.sales || [], cur.sales || []),
           subscriptions: mergeByIdUpdating(dbState.subscriptions || [], cur.subscriptions || []),
           schedule: mergeByIdUpdating(dbState.schedule || [], cur.schedule || []),
@@ -2767,6 +2795,7 @@ export function useStore() {
       sales: s.sales.filter(sale => sale.clientId !== id),
       visits: s.visits.filter(v => v.clientId !== id),
       bonusTransactions: s.bonusTransactions.filter(bt => bt.clientId !== id),
+      deletedClientIds: [...(s.deletedClientIds || []), id],
     }));
   };
 
@@ -2826,6 +2855,7 @@ export function useStore() {
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,
       bonusPaymentMethod: opts?.bonusPaymentMethod,
+      staffId: state.currentStaffId || undefined,
     };
     update(s => ({
       ...s,
@@ -2859,6 +2889,7 @@ export function useStore() {
       bonusUsed: bonusUsed || undefined,
       bonusAccrued: bonusAccrued || undefined,
       bonusPaymentMethod: opts?.bonusPaymentMethod,
+      staffId: state.currentStaffId || undefined,
     };
     update(s => ({
       ...s,

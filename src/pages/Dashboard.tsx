@@ -91,7 +91,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
-  const branchPlans = state.subscriptionPlans;
+  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
 
   const planRows = branchPlans.map(plan => {
     const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;

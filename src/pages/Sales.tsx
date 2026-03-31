@@ -13,6 +13,7 @@ export default function Sales({ store, onSell }: SalesProps) {
 
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   const monthSales = branchSales.filter(s => s.date >= monthStart);
+  const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
   const totalRevenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);
   const subSales = monthSales.filter(s => s.type === 'subscription');
@@ -59,12 +60,14 @@ export default function Sales({ store, onSell }: SalesProps) {
               <th>Итог</th>
               <th>Оплата</th>
               <th>Метка</th>
+              <th>Сотрудник</th>
               <th>Дата</th>
             </tr>
           </thead>
           <tbody>
             {branchSales.slice().reverse().map(sale => {
               const client = state.clients.find(c => c.id === sale.clientId);
+              const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
               return (
                 <tr key={sale.id}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
@@ -79,7 +82,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                   <td className="font-medium">{sale.finalPrice.toLocaleString()} ₽</td>
                   <td>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${sale.paymentMethod === 'card' ? 'badge-new' : 'badge-other'}`}>
-                      {sale.paymentMethod === 'card' ? 'Безнал' : 'Нал'}
+                      {sale.paymentMethod === 'card' ? 'Безнал' : sale.paymentMethod === 'bonus' ? 'Бонусы' : 'Нал'}
                     </span>
                   </td>
                   <td>
@@ -87,6 +90,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                     {sale.isRenewal && <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>}
                     {sale.isReturn && <span className="text-xs badge-sleeping px-2 py-0.5 rounded-full">Возврат</span>}
                   </td>
+                  <td className="text-sm text-muted-foreground">{staffName ? staffName.split(' ').slice(0, 2).join(' ') : '—'}</td>
                   <td className="text-sm text-muted-foreground">{sale.date}</td>
                 </tr>
               );
