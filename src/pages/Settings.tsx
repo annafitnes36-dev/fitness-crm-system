@@ -1559,12 +1559,21 @@ export default function Settings({ store }: SettingsProps) {
               />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Направления</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-xs text-muted-foreground">Направления</Label>
+                <button
+                  type="button"
+                  onClick={() => setSingleForm(f => ({ ...f, trainingTypeIds: [] }))}
+                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.length === 0 ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary text-muted-foreground'}`}
+                >
+                  Все направления
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {state.trainingTypes.map(tt => (
                   <button key={tt.id}
                     onClick={() => toggleTT(singleForm.trainingTypeIds, tt.id, ids => setSingleForm(f => ({ ...f, trainingTypeIds: ids })))}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.includes(tt.id) ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${singleForm.trainingTypeIds.length === 0 ? 'opacity-40 border-border' : singleForm.trainingTypeIds.includes(tt.id) ? 'bg-foreground text-primary-foreground border-foreground' : 'border-border hover:bg-secondary'}`}>
                     {tt.name}
                   </button>
                 ))}
