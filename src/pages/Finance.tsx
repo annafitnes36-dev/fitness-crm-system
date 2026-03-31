@@ -76,7 +76,7 @@ export default function Finance({ store }: FinanceProps) {
 
   const [expDateFrom, setExpDateFrom] = useState(currentMonthStart);
   const [expDateTo, setExpDateTo] = useState(currentMonthEnd);
-  const [expBranchId, setExpBranchId] = useState(state.currentBranchId);
+  const expBranchId = state.currentBranchId;
   const [expCategoryId, setExpCategoryId] = useState('');
 
   // Редактирование расхода
@@ -211,7 +211,7 @@ export default function Finance({ store }: FinanceProps) {
               <tbody>
                 {allTransactions.map(t => (
                   <tr key={t.id}>
-                    <td className="text-muted-foreground text-sm">{t.date}</td>
+                    <td className="text-muted-foreground text-sm">{t.date ? new Date(t.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                     <td className="font-medium text-sm">
                       {t.client ? `${t.client.lastName} ${t.client.firstName}` : '—'}
                     </td>
@@ -250,13 +250,7 @@ export default function Finance({ store }: FinanceProps) {
               <input type="date" value={expDateTo} onChange={e => setExpDateTo(e.target.value)}
                 className="border border-input rounded-lg px-3 py-2 text-sm" />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Филиал</label>
-              <select className="border border-input rounded-lg px-3 py-2 text-sm" value={expBranchId} onChange={e => setExpBranchId(e.target.value)}>
-                <option value="">Все</option>
-                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
+
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Категория</label>
               <select className="border border-input rounded-lg px-3 py-2 text-sm" value={expCategoryId} onChange={e => setExpCategoryId(e.target.value)}>
@@ -334,7 +328,7 @@ export default function Finance({ store }: FinanceProps) {
                   const cat = state.expenseCategories.find(c => c.id === exp.categoryId);
                   return (
                     <tr key={exp.id}>
-                      <td className="text-muted-foreground text-sm">{exp.date}</td>
+                      <td className="text-muted-foreground text-sm">{exp.date ? new Date(exp.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                       <td className="text-sm font-medium">{cat?.name || '—'}</td>
                       <td className="text-sm text-muted-foreground">{exp.comment || '—'}</td>
                       <td className="text-sm">{exp.paymentMethod === 'cash' ? 'Нал' : 'Безнал'}</td>
