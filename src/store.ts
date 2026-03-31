@@ -544,6 +544,7 @@ export interface AppState {
   bonusSettings: BonusSettings;
   bonusTransactions: BonusTransaction[];
   deletedClientIds: string[];
+  dashboardHiddenIds: string[]; // скрыты с дашборда, но не удалены из данных
 }
 
 const defaultStaff: StaffMember[] = [
@@ -600,6 +601,7 @@ const initialState: AppState = {
   bonusSettings: { enabled: false, accrualPercent: 5, expiryDays: 365 },
   bonusTransactions: [],
   deletedClientIds: [],
+  dashboardHiddenIds: [],
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -2367,6 +2369,7 @@ function loadState(): AppState {
         failedNotifications: parsed.failedNotifications ?? {},
         notificationCategories: parsed.notificationCategories ?? DEFAULT_NOTIFICATION_CATEGORIES,
         deletedClientIds,
+        dashboardHiddenIds: parsed.dashboardHiddenIds ?? [],
       };
       // Миграция: импорт базы клиентов Цветной (v2 — полная база)
       if (!base.importedCvetnoiV2) {
@@ -2435,7 +2438,7 @@ const PATCH_KEYS: (keyof AppState)[] = [
   'inquiries', 'dismissedNotifications', 'failedNotifications',
   'notificationCategories', 'adSources', 'contactChannels',
   'salesPlans', 'monthlyPlans', 'expensePlans', 'expenseCategories',
-  'bonusSettings', 'projectCode',
+  'bonusSettings', 'projectCode', 'dashboardHiddenIds',
   'importedCvetnoiV1', 'importedCvetnoiV2', 'importedCvetnoiV3',
   'importedBorV1', 'importedBorV2', 'importedTsentrV1', 'importedOlimpV1',
 ];
@@ -3149,6 +3152,13 @@ export function useStore() {
     }));
   };
 
+  const hideDashboardItem = (id: string) => {
+    update(s => ({
+      ...s,
+      dashboardHiddenIds: [...(s.dashboardHiddenIds || []), id],
+    }));
+  };
+
   const addContactChannel = (channel: string) => {
     update(s => ({ ...s, contactChannels: [...s.contactChannels, channel] }));
   };
@@ -3438,7 +3448,7 @@ export function useStore() {
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
     addStaff, updateStaff, removeStaff, setCurrentStaff, generateInviteToken,
-    addInquiry, deleteInquiry, deleteSale,
+    addInquiry, deleteInquiry, deleteSale, hideDashboardItem,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, updateExpense, deleteExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,

@@ -10,16 +10,21 @@ interface DashboardProps {
 }
 
 type PeriodKey = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
-function getPeriodDates(period: PeriodKey, customFrom: string, customTo: string) {
+function getPeriodDates(period: PeriodKey, customFrom: string, customTo: string, browseYear: number, browseMonthIdx: number) {
   const now = new Date();
   const fmt = (d: Date) => d.toISOString().split('T')[0];
   const today = fmt(now);
   if (period === 'today') return { from: today, to: today };
   if (period === 'week') { const m = new Date(now); m.setDate(now.getDate() - now.getDay() + 1); return { from: fmt(m), to: today }; }
-  if (period === 'month') return { from: fmt(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
+  if (period === 'month') {
+    const from = fmt(new Date(browseYear, browseMonthIdx, 1));
+    const isCurrentMonth = browseYear === now.getFullYear() && browseMonthIdx === now.getMonth();
+    const to = isCurrentMonth ? today : fmt(new Date(browseYear, browseMonthIdx + 1, 0));
+    return { from, to };
+  }
   if (period === 'quarter') { const q = Math.floor(now.getMonth() / 3); return { from: fmt(new Date(now.getFullYear(), q * 3, 1)), to: today }; }
   if (period === 'year') return { from: fmt(new Date(now.getFullYear(), 0, 1)), to: today };
-  return { from: customFrom || fmt(new Date(now.getFullYear(), now.getMonth(), 1)), to: customTo || today };
+  return { from: customFrom || fmt(new Date(browseYear, browseMonthIdx, 1)), to: customTo || today };
 }
 
 const PERIODS: { key: PeriodKey; label: string }[] = [
@@ -28,27 +33,45 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
-  const { state, getClientCategory, deleteInquiry, deleteSale, deleteClient } = store;
+  const { state, getClientCategory, deleteInquiry, hideDashboardItem } = store;
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Навигация по месяцам (только когда period === 'month')
+  const [browseYear, setBrowseYear] = useState(now.getFullYear());
+  const [browseMonthIdx, setBrowseMonthIdx] = useState(now.getMonth());
+
+  const isCurrentMonth = browseYear === now.getFullYear() && browseMonthIdx === now.getMonth();
+  const browsedMonth = `${browseYear}-${String(browseMonthIdx + 1).padStart(2, '0')}`;
+  const currentMonth = browsedMonth;
+
+  const goPrevMonth = () => {
+    if (browseMonthIdx === 0) { setBrowseYear(y => y - 1); setBrowseMonthIdx(11); }
+    else setBrowseMonthIdx(m => m - 1);
+  };
+  const goNextMonth = () => {
+    if (isCurrentMonth) return;
+    if (browseMonthIdx === 11) { setBrowseYear(y => y + 1); setBrowseMonthIdx(0); }
+    else setBrowseMonthIdx(m => m + 1);
+  };
 
   const [period, setPeriod] = useState<PeriodKey>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const { from: periodFrom, to: periodTo } = getPeriodDates(period, customFrom, customTo);
+  const { from: periodFrom, to: periodTo } = getPeriodDates(period, customFrom, customTo, browseYear, browseMonthIdx);
   const inPeriod = (date: string) => date >= periodFrom && date <= periodTo;
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
+  const hiddenIds = new Set(state.dashboardHiddenIds || []);
 
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
-  const monthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
+  const monthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date) && !hiddenIds.has(s.id));
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
   const returnSubs = monthSubSales.filter(s => s.isReturn).length;
 
   const branchClients = state.clients.filter(c => c.branchId === state.currentBranchId && !c.dashboardExclude);
-  const newClientsMonth = branchClients.filter(c => inPeriod(c.createdAt)).length;
-  const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).length;
+  const newClientsMonth = branchClients.filter(c => inPeriod(c.createdAt) && !hiddenIds.has(c.id)).length;
+  const monthInquiries = state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date) && !hiddenIds.has(i.id)).length;
   const totalInquiries = monthInquiries + newClientsMonth;
 
   const todayStr = now.toISOString().split('T')[0];
@@ -105,9 +128,10 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const totalLeft = planRows.reduce((s, r) => s + r.left, 0);
   const totalPct = totalTarget > 0 ? Math.min(100, Math.round((totalSold / totalTarget) * 100)) : null;
 
-  const recentSales = branchSales.slice(-5).reverse();
+  const periodSales = branchSales.filter(s => inPeriod(s.date)).slice().reverse();
+  const recentSales = period === 'month' ? periodSales : periodSales.slice(0, 20);
 
-  const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(browseYear, browseMonthIdx, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
   // Средний чек — только по абонементам
   const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
@@ -235,8 +259,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const handleDeleteRow = (row: DetailRow) => {
     if (!row.deleteType) return;
     if (row.deleteType === 'inquiry') deleteInquiry(row.id);
-    else if (row.deleteType === 'sale') deleteSale(row.id);
-    else if (row.deleteType === 'client') deleteClient(row.id);
+    else hideDashboardItem(row.id);
   };
 
   return (
@@ -251,6 +274,21 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             </button>
           ))}
         </div>
+
+        {/* Навигация по месяцам */}
+        {period === 'month' && (
+          <div className="flex items-center gap-1 bg-secondary rounded-xl p-1">
+            <button onClick={goPrevMonth} className="px-2 py-1.5 rounded-lg hover:bg-white transition-colors text-muted-foreground hover:text-foreground">
+              <Icon name="ChevronLeft" size={16} />
+            </button>
+            <span className="px-2 text-sm font-medium capitalize min-w-32 text-center">{monthLabel}</span>
+            <button onClick={goNextMonth} disabled={isCurrentMonth}
+              className="px-2 py-1.5 rounded-lg hover:bg-white transition-colors text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed">
+              <Icon name="ChevronRight" size={16} />
+            </button>
+          </div>
+        )}
+
         {period === 'custom' && (
           <div className="flex items-center gap-2">
             <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border border-input rounded-lg px-3 py-1.5 text-sm" />
@@ -470,7 +508,9 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       {/* Recent sales */}
       <div className="bg-white border border-border rounded-xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Последние продажи</div>
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {period === 'month' ? `Продажи — ${monthLabel}` : 'Продажи за период'}
+          </div>
           <button onClick={() => onNavigate('sales')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
             Все <Icon name="ArrowRight" size={12} />
           </button>
