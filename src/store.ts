@@ -2634,7 +2634,7 @@ export function useStore() {
           const result: T[] = dbItems.map(dbItem => {
             const curItem = curMap.get(dbItem.id);
             if (!curItem) return dbItem;
-            return dbItem;
+            return curItem;
           });
           curItems.forEach(ci => { if (!dbMap.has(ci.id)) result.push(ci); });
           return result;
