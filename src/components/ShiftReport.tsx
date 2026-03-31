@@ -37,6 +37,15 @@ export default function ShiftReport({ open, store, shift, onOpenShift }: ShiftRe
   const cardRevenue = branchSales.filter(s => !s.isReturn && s.paymentMethod === 'card').reduce((sum, s) => sum + s.finalPrice, 0);
   const returnAmount = branchSales.filter(s => s.isReturn).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
+  // Остаток в кассе на конец смены
+  const allCashSales = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && !s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
+  const allCashReturns = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && s.isReturn).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  const allCashExpenses = state.expenses.filter(e => e.branchId === shift.branchId && e.paymentMethod === 'cash').reduce((sum, e) => sum + e.amount, 0);
+  const cashOps = state.cashOperations.filter(o => o.branchId === shift.branchId);
+  const depositsTotal = cashOps.filter(o => o.type === 'deposit').reduce((sum, o) => sum + o.amount, 0);
+  const manualCollectionsTotal = cashOps.filter(o => o.type === 'collection' && !o.comment.startsWith('Возврат абонемента:')).reduce((sum, o) => sum + o.amount, 0);
+  const cashBalance = allCashSales + depositsTotal - allCashExpenses - allCashReturns - manualCollectionsTotal;
+
   const shiftStaff = state.staff.find(s => s.id === shift.staffId);
   const branch = state.branches.find(b => b.id === shift.branchId);
 
@@ -99,6 +108,14 @@ export default function ShiftReport({ open, store, shift, onOpenShift }: ShiftRe
                 <span className="text-lg font-bold tabular-nums">{fmt(totalRevenue - returnAmount)}</span>
               </div>
             </div>
+          </div>
+
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
+            <span className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+              <Icon name="Banknote" size={16} className="text-emerald-600" />
+              Остаток в кассе
+            </span>
+            <span className="text-xl font-bold text-emerald-700 tabular-nums">{fmt(Math.max(0, cashBalance))}</span>
           </div>
 
           <Button onClick={onOpenShift} className="w-full bg-foreground text-primary-foreground hover:opacity-90" size="lg">
