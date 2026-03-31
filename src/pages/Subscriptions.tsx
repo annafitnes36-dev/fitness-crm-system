@@ -85,8 +85,8 @@ export default function Subscriptions({ store, onSell }: SubscriptionsProps) {
                 <tr key={sub.id}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
                   <td className="text-muted-foreground text-sm">{sub.planName}</td>
-                  <td className="text-muted-foreground text-sm">{sub.purchaseDate}</td>
-                  <td className="text-sm">{sub.endDate}</td>
+                  <td className="text-muted-foreground text-sm">{sub.purchaseDate ? new Date(sub.purchaseDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
+                  <td className="text-sm">{sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                   <td className="text-sm">{sub.sessionsLeft === 'unlimited' ? '∞' : sub.sessionsLeft}</td>
                   <td className="text-sm">{sub.freezeDaysLeft} дн.</td>
                   <td className="text-sm">

@@ -91,7 +91,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                     {sale.isReturn && <span className="text-xs badge-sleeping px-2 py-0.5 rounded-full">Возврат</span>}
                   </td>
                   <td className="text-sm text-muted-foreground">{staffName ? staffName.split(' ').slice(0, 2).join(' ') : '—'}</td>
-                  <td className="text-sm text-muted-foreground">{sale.date}</td>
+                  <td className="text-sm text-muted-foreground">{sale.date ? new Date(sale.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
                 </tr>
               );
             })}
