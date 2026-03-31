@@ -89,21 +89,21 @@ function SyncIndicator({ status }: { status: SyncStatus }) {
 
   if (!visible) return null;
   if (status === 'syncing') return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-      <span className="hidden sm:inline">Сохранение...</span>
+    <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+      <span>Сохранение...</span>
     </span>
   );
   if (status === 'saved') return (
-    <span className="flex items-center gap-1 text-xs text-emerald-600">
-      <Icon name="Check" size={12} />
-      <span className="hidden sm:inline">Сохранено</span>
+    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
+      <Icon name="Check" size={13} />
+      <span>Сохранено</span>
     </span>
   );
   if (status === 'error') return (
-    <span className="flex items-center gap-1 text-xs text-red-500" title="Нет связи с сервером. Данные в браузере.">
-      <Icon name="WifiOff" size={12} />
-      <span className="hidden sm:inline">Нет связи</span>
+    <span className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2.5 py-1 animate-pulse" title="Нет связи с сервером — проверьте интернет">
+      <Icon name="WifiOff" size={13} />
+      <span>Нет связи</span>
     </span>
   );
   return null;
