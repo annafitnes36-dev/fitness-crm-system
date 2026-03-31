@@ -169,8 +169,8 @@ function computePlan(
   if (saved?.plan && Object.keys(saved.plan).length > 0) return saved.plan;
 
   // Если нет сохранённого — вычисляем автоматически из плана продаж и плана расходов
-  const subPlans = state.subscriptionPlans.filter(p => p.branchId === branchId);
-  const addPlans = state.singleVisitPlans.filter(p => p.branchId === branchId);
+  const subPlans = state.subscriptionPlans;
+  const addPlans = state.singleVisitPlans;
   const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(branchId));
   const branchCats = state.expenseCategories.filter(c => c.branchId === branchId);
   const sp = state.salesPlans.find(p => p.branchId === branchId && p.month === month);

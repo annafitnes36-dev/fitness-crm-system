@@ -2518,51 +2518,45 @@ export function useStore() {
     loadStateFromDb().then(dbState => {
       // Проверяем что из БД пришёл реальный state (есть массив staff), а не мусор
       const isValidState = dbState && Array.isArray(dbState.staff) && dbState.staff.length > 0;
-      console.log('[CRM] DB load:', { isValidState, sales: dbState?.sales?.length ?? 0, subs: dbState?.subscriptions?.length ?? 0, clients: dbState?.clients?.length ?? 0 });
       if (isValidState && dbState) {
         // Переносим пароли/логины из localStaff в dbStaff
         const localStaffMap = new Map(localStaff.map(s => [s.id, s]));
         const mergedStaff = dbState.staff.map((s: StaffMember) => {
           const local = localStaffMap.get(s.id);
           if (!local) return s;
-          return {
-            ...s,
-            password: s.password || local.password,
-            login: s.login || local.login,
-          };
+          return { ...s, password: s.password || local.password, login: s.login || local.login };
         });
         const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
         const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
 
-        // Мёрджим записи которые могут быть в localStorage но ещё не в БД
-        const dbClientIds = new Set((dbState.clients || []).map((c: Client) => c.id));
-        const extraClients = (localState.clients || []).filter(c => !dbClientIds.has(c.id));
-        const dbExpenseIds = new Set((dbState.expenses || []).map((e: Expense) => e.id));
-        const extraExpenses = (localState.expenses || []).filter(e => !dbExpenseIds.has(e.id));
-        const dbCashOpIds = new Set((dbState.cashOperations || []).map((o: CashOperation) => o.id));
-        const extraCashOps = (localState.cashOperations || []).filter(o => !dbCashOpIds.has(o.id));
-        const dbSaleIds = new Set((dbState.sales || []).map((s: Sale) => s.id));
-        const extraSales = (localState.sales || []).filter(s => !dbSaleIds.has(s.id));
+        // Мёрджим ВСЕ коллекции: берём из БД как основу, добавляем из localStorage то чего нет в БД
+        const mergeById = <T extends { id: string }>(dbItems: T[], localItems: T[]) => {
+          const dbIds = new Set(dbItems.map(i => i.id));
+          const extra = localItems.filter(i => !dbIds.has(i.id));
+          return extra.length > 0 ? [...dbItems, ...extra] : dbItems;
+        };
 
         let merged: AppState = {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-          clients: extraClients.length > 0 ? [...(dbState.clients || []), ...extraClients] : (dbState.clients || []),
-          expenses: extraExpenses.length > 0 ? [...(dbState.expenses || []), ...extraExpenses] : (dbState.expenses || []),
-          cashOperations: extraCashOps.length > 0 ? [...(dbState.cashOperations || []), ...extraCashOps] : (dbState.cashOperations || []),
-          sales: extraSales.length > 0 ? [...(dbState.sales || []), ...extraSales] : (dbState.sales || []),
-          shifts: dbState.shifts || [],
-          bonusTransactions: dbState.bonusTransactions || [],
-          bonusSettings: dbState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
+          clients: mergeById(dbState.clients || [], localState.clients || []),
+          sales: mergeById(dbState.sales || [], localState.sales || []),
+          subscriptions: mergeById(dbState.subscriptions || [], localState.subscriptions || []),
+          schedule: mergeById(dbState.schedule || [], localState.schedule || []),
+          visits: mergeById(dbState.visits || [], localState.visits || []),
+          expenses: mergeById(dbState.expenses || [], localState.expenses || []),
+          cashOperations: mergeById(dbState.cashOperations || [], localState.cashOperations || []),
+          shifts: mergeById(dbState.shifts || [], localState.shifts || []),
+          bonusTransactions: mergeById(dbState.bonusTransactions || [], localState.bonusTransactions || []),
+          bonusSettings: dbState.bonusSettings || localState.bonusSettings || { enabled: false, accrualPercent: 5, expiryDays: 365 },
         };
         // Применяем импорт Бор если ещё не применён
         if (!merged.importedBorV1) {
           merged = applyBorImport(merged);
           merged.importedBorV1 = true;
         }
-        console.log('[CRM] Merged:', { sales: merged.sales?.length ?? 0, subs: merged.subscriptions?.length ?? 0, clients: merged.clients?.length ?? 0 });
         setState(merged);
-        saveState(merged, (ok) => console.log('[CRM] Save after merge:', ok));
+        // НЕ вызываем saveState(merged) — localStorage уже актуален и не надо его перезаписывать данными из БД
       }
       setDbLoaded(true);
     });

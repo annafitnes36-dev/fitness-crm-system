@@ -61,8 +61,8 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
     return `${selectedYear}-${String(m).padStart(2, '0')}`;
   });
 
-  const subPlans = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
-  const addPlans = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
+  const subPlans = state.subscriptionPlans;
+  const addPlans = state.singleVisitPlans;
   // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) для данного филиала
   const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(selectedBranchId));
   const allItems = [

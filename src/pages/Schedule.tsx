@@ -300,7 +300,6 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
       return plan.allDirections || (tt ? plan.trainingTypeIds.includes(tt.id) : false);
     });
     const singles = state.singleVisitPlans.filter(p => {
-      if (p.branchId && p.branchId !== state.currentBranchId) return false;
       if (tt && p.trainingTypeIds.length > 0 && !p.trainingTypeIds.includes(tt.id)) return false;
       const purchasedCount = state.sales.filter(s => s.clientId === clientId && s.type === 'single' && s.itemId === p.id).length;
       const usedCount = state.visits.filter(v => v.clientId === clientId && v.isSingleVisit && v.status === 'attended' && (v.singlePlanId != null ? v.singlePlanId === p.id : v.price === p.price)).length;
