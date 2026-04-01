@@ -3607,6 +3607,10 @@ export function useStore() {
     addCashOperation, deleteCashOperation, updateProjectCode,
     openShift, closeShift, getActiveShift,
     getClientBonusBalance, accrueBonus, spendBonus, updateBonusSettings,
+    importState: (imported: AppState) => {
+      setState(imported);
+      saveState(imported);
+    },
   };
 }
 

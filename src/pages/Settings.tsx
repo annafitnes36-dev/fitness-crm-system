@@ -1,6 +1,6 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { StoreType, TrainingCategory, Hall, Trainer, TrainingType, SubscriptionPlan, SingleVisitPlan, ExpenseCategory, MonthlyPlanRow, NotificationCategory, DEFAULT_NOTIFICATION_CATEGORIES } from '@/store';
-import type { ExpensePlan } from '@/store';
+import type { ExpensePlan, AppState } from '@/store';
 import Icon from '@/components/ui/icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,9 @@ interface SettingsProps {
   store: StoreType;
 }
 
-type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications' | 'project' | 'bonus';
+interface BackupMeta { id: number; created_at: string; label: string; size_bytes: number }
+
+type Tab = 'trainings' | 'training-cats' | 'trainers' | 'halls' | 'plans' | 'single' | 'sources' | 'expense-cats' | 'expense-plan' | 'sales-plan' | 'planning' | 'notifications' | 'project' | 'bonus' | 'backups';
 
 const COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6',
@@ -837,6 +839,131 @@ export default function Settings({ store }: SettingsProps) {
   const [projectCodeInput, setProjectCodeInput] = useState(state.projectCode);
   const [projectCodeSaved, setProjectCodeSaved] = useState(false);
 
+  // ── Резервные копии ──────────────────────────────────────────────────────
+  const [backupsList, setBackupsList] = useState<BackupMeta[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupCreating, setBackupCreating] = useState(false);
+  const [backupRestoring, setBackupRestoring] = useState<number | null>(null);
+  const [backupDeleting, setBackupDeleting] = useState<number | null>(null);
+  const [backupMsg, setBackupMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const backupMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  const CRM_URL = (window as unknown as Record<string, string>)['__CRM_STATE_URL__'] || '';
+
+  const showBackupMsg = (type: 'ok' | 'err', text: string) => {
+    setBackupMsg({ type, text });
+    if (backupMsgTimer.current) clearTimeout(backupMsgTimer.current);
+    backupMsgTimer.current = setTimeout(() => setBackupMsg(null), 4000);
+  };
+
+  const loadBackups = async () => {
+    if (!CRM_URL) return;
+    setBackupsLoading(true);
+    try {
+      const r = await fetch(`${CRM_URL}?action=backups`);
+      const j = await r.json();
+      if (j.ok) setBackupsList(j.backups);
+    } catch { /* ignore */ }
+    setBackupsLoading(false);
+  };
+
+  const createManualBackup = async () => {
+    if (!CRM_URL) { showBackupMsg('err', 'Нет подключения к базе данных'); return; }
+    setBackupCreating(true);
+    try {
+      const r = await fetch(`${CRM_URL}?action=backup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'manual' }),
+      });
+      const j = await r.json();
+      if (j.ok) { showBackupMsg('ok', 'Резервная копия создана'); loadBackups(); }
+      else showBackupMsg('err', 'Ошибка создания копии');
+    } catch { showBackupMsg('err', 'Ошибка сети'); }
+    setBackupCreating(false);
+  };
+
+  const restoreBackup = async (id: number) => {
+    if (!CRM_URL) return;
+    if (!confirm('Восстановить из этой копии? Текущие данные будут заменены (но сначала автоматически сохранится бэкап «before_restore»).')) return;
+    setBackupRestoring(id);
+    try {
+      const r = await fetch(`${CRM_URL}?action=restore&id=${id}`, { method: 'POST' });
+      const j = await r.json();
+      if (j.ok) {
+        showBackupMsg('ok', 'Данные восстановлены! Перезагружаем страницу...');
+        setTimeout(() => window.location.reload(), 1500);
+      } else showBackupMsg('err', 'Ошибка восстановления');
+    } catch { showBackupMsg('err', 'Ошибка сети'); }
+    setBackupRestoring(null);
+  };
+
+  const deleteBackup = async (id: number) => {
+    if (!CRM_URL) return;
+    if (!confirm('Удалить эту резервную копию?')) return;
+    setBackupDeleting(id);
+    try {
+      const r = await fetch(`${CRM_URL}?action=backup&id=${id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (j.ok) { loadBackups(); showBackupMsg('ok', 'Копия удалена'); }
+      else showBackupMsg('err', 'Ошибка удаления');
+    } catch { showBackupMsg('err', 'Ошибка сети'); }
+    setBackupDeleting(null);
+  };
+
+  const downloadBackup = async (id: number, label: string, created_at: string) => {
+    if (!CRM_URL) return;
+    try {
+      const r = await fetch(`${CRM_URL}?action=backup&id=${id}`);
+      const j = await r.json();
+      if (!j.ok) { showBackupMsg('err', 'Не удалось скачать'); return; }
+      const blob = new Blob([JSON.stringify(j.backup.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date(created_at).toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+      a.href = url; a.download = `crm-backup-${label}-${date}.json`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { showBackupMsg('err', 'Ошибка скачивания'); }
+  };
+
+  const exportCurrentState = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+    a.href = url; a.download = `crm-export-${date}.json`; a.click();
+    URL.revokeObjectURL(url);
+    showBackupMsg('ok', 'Файл скачан');
+  };
+
+  const importStateFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as AppState;
+        if (!parsed.clients || !parsed.staff) { showBackupMsg('err', 'Файл не похож на экспорт CRM'); return; }
+        if (!confirm('Заменить ВСЕ данные данными из файла? Текущее состояние будет перезаписано.')) return;
+        store.importState(parsed);
+        showBackupMsg('ok', 'Данные импортированы! Перезагружаем...');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch { showBackupMsg('err', 'Не удалось прочитать файл'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const formatBackupLabel = (label: string) => {
+    if (label === 'auto') return 'Авто';
+    if (label === 'manual') return 'Ручная';
+    if (label === 'before_restore') return 'Перед восст.';
+    return label;
+  };
+
+  const formatBytes = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
+
   const [showAddExpCat, setShowAddExpCat] = useState(false);
   const [editingExpCat, setEditingExpCat] = useState<ExpenseCategory | null>(null);
   const [expCatForm, setExpCatForm] = useState({ name: '' });
@@ -860,6 +987,7 @@ export default function Settings({ store }: SettingsProps) {
     { id: 'notifications', label: 'Уведомления', icon: 'Bell' },
     { id: 'bonus', label: 'Бонусы', icon: 'Gift', directorOnly: true },
     { id: 'project', label: 'Проект', icon: 'Key', directorOnly: true },
+    { id: 'backups', label: 'Резервные копии', icon: 'HardDrive', directorOnly: true },
   ];
   const tabs = allTabs.filter(t => !t.directorOnly || isDirector);
 
@@ -1400,6 +1528,142 @@ export default function Settings({ store }: SettingsProps) {
           </div>
         );
       })()}
+
+      {tab === 'backups' && (
+        <div className="space-y-4 animate-fade-in max-w-2xl">
+
+          {/* Уведомление */}
+          {backupMsg && (
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${backupMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              <Icon name={backupMsg.type === 'ok' ? 'CheckCircle' : 'AlertCircle'} size={15} />
+              {backupMsg.text}
+            </div>
+          )}
+
+          {/* Экспорт / импорт JSON */}
+          <div className="bg-white border border-border rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
+                <Icon name="Download" size={16} className="text-primary-foreground" />
+              </div>
+              <div>
+                <div className="font-semibold">Экспорт и импорт данных</div>
+                <div className="text-xs text-muted-foreground">Скачайте полный снимок базы или загрузите ранее сохранённый</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={exportCurrentState} variant="outline" className="gap-2">
+                <Icon name="Download" size={14} />
+                Скачать JSON
+              </Button>
+              <Button onClick={() => importFileRef.current?.click()} variant="outline" className="gap-2">
+                <Icon name="Upload" size={14} />
+                Загрузить JSON
+              </Button>
+              <input ref={importFileRef} type="file" accept=".json" className="hidden" onChange={importStateFromFile} />
+            </div>
+            <p className="text-xs text-muted-foreground">JSON-файл содержит все данные: клиентов, абонементы, расписание, финансы, настройки. Храните его в надёжном месте.</p>
+          </div>
+
+          {/* Резервные копии в БД */}
+          <div className="bg-white border border-border rounded-xl p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center">
+                  <Icon name="HardDrive" size={16} className="text-primary-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold">Резервные копии в базе данных</div>
+                  <div className="text-xs text-muted-foreground">Автоматически каждые 30 мин · до 30 копий хранится</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={createManualBackup} disabled={backupCreating || !CRM_URL} className="gap-2 bg-foreground text-primary-foreground hover:opacity-90 h-8 text-xs px-3">
+                  {backupCreating ? <Icon name="Loader" size={13} className="animate-spin" /> : <Icon name="Plus" size={13} />}
+                  Создать сейчас
+                </Button>
+                <Button onClick={loadBackups} disabled={backupsLoading || !CRM_URL} variant="outline" size="icon" className="h-8 w-8">
+                  <Icon name={backupsLoading ? 'Loader' : 'RefreshCw'} size={13} className={backupsLoading ? 'animate-spin' : ''} />
+                </Button>
+              </div>
+            </div>
+
+            {!CRM_URL && (
+              <div className="text-sm text-muted-foreground bg-secondary rounded-lg px-4 py-3">База данных недоступна — резервные копии не работают</div>
+            )}
+
+            {CRM_URL && backupsList.length === 0 && !backupsLoading && (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                Копий пока нет. Нажмите «Обновить» чтобы загрузить список или «Создать сейчас» для первой копии.
+              </div>
+            )}
+
+            {backupsList.length > 0 && (
+              <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                {backupsList.map(b => (
+                  <div key={b.id} className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-secondary/30 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          b.label === 'auto' ? 'bg-blue-100 text-blue-700' :
+                          b.label === 'manual' ? 'bg-emerald-100 text-emerald-700' :
+                          b.label === 'before_restore' ? 'bg-amber-100 text-amber-700' :
+                          'bg-secondary text-muted-foreground'
+                        }`}>
+                          {formatBackupLabel(b.label)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{formatBytes(b.size_bytes)}</span>
+                      </div>
+                      <div className="text-sm mt-0.5">
+                        {new Date(b.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        title="Скачать"
+                        onClick={() => downloadBackup(b.id, b.label, b.created_at)}
+                      >
+                        <Icon name="Download" size={13} />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        title="Восстановить из этой копии"
+                        disabled={backupRestoring === b.id}
+                        onClick={() => restoreBackup(b.id)}
+                      >
+                        {backupRestoring === b.id
+                          ? <Icon name="Loader" size={13} className="animate-spin" />
+                          : <Icon name="RotateCcw" size={13} />}
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50"
+                        title="Удалить"
+                        disabled={backupDeleting === b.id}
+                        onClick={() => deleteBackup(b.id)}
+                      >
+                        {backupDeleting === b.id
+                          ? <Icon name="Loader" size={13} className="animate-spin" />
+                          : <Icon name="Trash2" size={13} />}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Подсказка */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-start gap-2">
+              <Icon name="Info" size={15} className="text-blue-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-blue-800">
+                <strong>Как работает защита данных:</strong> каждые 30 минут при сохранении автоматически создаётся копия в базе данных. Хранится последние 30 копий. Перед любым восстановлением текущие данные тоже сохраняются. Для надёжности дополнительно скачивайте JSON-файл вручную.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <Dialog open={showAddTraining} onOpenChange={setShowAddTraining}>
