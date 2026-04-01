@@ -64,8 +64,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   // Все продажи за период (включая скрытые) — для детального просмотра в модале
   const allMonthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
-  // Видимые продажи (без скрытых) — для счётчиков в карточках
-  const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id));
+  // Видимые продажи (без скрытых и без возвратов денег) — для счётчиков в карточках
+  const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id) && !s.isRefund);
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
@@ -250,7 +250,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     title: 'Все продажи абонементов',
     rows: allMonthSubSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
-      const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возврат' : '';
+      const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возвращение' : s.isRefund ? 'возврат' : '';
       const isHidden = hiddenIds.has(s.id);
       return {
         name: c ? clientName(c) : '—',

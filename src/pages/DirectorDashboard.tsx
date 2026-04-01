@@ -83,7 +83,7 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
   const branchSales = state.sales.filter(s =>
     inPeriod(s.date) && (branchFilter === 'all' || s.branchId === branchFilter)
   );
-  const subSales = branchSales.filter(s => s.type === 'subscription');
+  const subSales = branchSales.filter(s => s.type === 'subscription' && !s.isRefund);
   const singleSales = branchSales.filter(s => s.type === 'single');
 
   const totalSubs = subSales.length;
@@ -99,8 +99,8 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
     inPeriod(e.date) && (branchFilter === 'all' || e.branchId === branchFilter)
   );
   const totalExpenses = branchExpenses.reduce((s, e) => s + e.amount, 0);
-  // Возвраты — для отображения в финансовом блоке
-  const totalReturns = branchSales.filter(s => s.isReturn).reduce((s, x) => s + Math.abs(x.finalPrice), 0);
+  // Возвраты денег — для отображения в финансовом блоке
+  const totalReturns = branchSales.filter(s => s.isRefund).reduce((s, x) => s + Math.abs(x.finalPrice), 0);
   const profit = totalRevenue - totalExpenses;
   const margin = totalRevenue > 0 ? Math.round((profit / totalRevenue) * 100) : 0;
   const totalDiscounts = branchSales.reduce((s, x) => s + (x.price - x.finalPrice), 0);

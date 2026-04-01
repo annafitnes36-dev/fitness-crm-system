@@ -46,7 +46,7 @@ export default function Sales({ store, onSell }: SalesProps) {
   const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
   const totalRevenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);
-  const subSales = monthSales.filter(s => s.type === 'subscription');
+  const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
   const cashTotal = monthSales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.finalPrice, 0);
   const cardTotal = monthSales.filter(s => s.paymentMethod === 'card').reduce((sum, s) => sum + s.finalPrice, 0);
 
@@ -179,7 +179,8 @@ export default function Sales({ store, onSell }: SalesProps) {
                   <td>
                     {sale.isFirstSubscription && <span className="text-xs badge-new px-2 py-0.5 rounded-full">Первый</span>}
                     {sale.isRenewal && <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>}
-                    {sale.isReturn && <span className="text-xs badge-sleeping px-2 py-0.5 rounded-full">Возврат</span>}
+                    {sale.isReturn && <span className="text-xs badge-sleeping px-2 py-0.5 rounded-full">Возвращение</span>}
+                    {sale.isRefund && <span className="text-xs badge-churn px-2 py-0.5 rounded-full">Возврат</span>}
                   </td>
                   <td className="text-sm text-muted-foreground">{staffName ? staffName.split(' ').slice(0, 2).join(' ') : '—'}</td>
                   <td className="text-sm text-muted-foreground">{sale.date ? new Date(sale.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>

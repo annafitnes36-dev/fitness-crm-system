@@ -78,7 +78,7 @@ function computeFact(
 
   // Продажи за месяц
   const monthSales = state.sales.filter(s => inMonth(s.date) && branchFilter(s.branchId));
-  const subSales = monthSales.filter(s => s.type === 'subscription');
+  const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
   const addSales = monthSales.filter(s => s.type === 'single' || s.type === 'extra');
 
   const revenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);

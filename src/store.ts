@@ -154,6 +154,7 @@ export interface Sale {
   isFirstSubscription: boolean;
   isReturn: boolean;
   isRenewal: boolean;
+  isRefund?: boolean;
   bonusUsed?: number;
   bonusAccrued?: number;
   bonusPaymentMethod?: 'cash' | 'card';
@@ -2835,7 +2836,7 @@ export function useStore() {
     const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription');
     const hadSub = prevSubs.length > 0;
     const lastSale = prevSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
-    const isReturn = hadSub && lastSale ? (new Date(saleDate).getTime() - new Date(lastSale.date).getTime()) > 30 * 24 * 60 * 60 * 1000 : false;
+    const isReturn = hadSub && lastSale ? (new Date(saleDate).getTime() - new Date(lastSale.date).getTime()) > 60 * 24 * 60 * 60 * 1000 : false;
     const isRenewal = hadSub && !isReturn;
     const isFirst = !hadSub;
     const finalPrice = Math.round(plan.price * (1 - discount / 100));
@@ -2991,8 +2992,9 @@ export function useStore() {
         date: new Date().toISOString().split('T')[0],
         branchId: sub.branchId,
         isFirstSubscription: false,
-        isReturn: true,
+        isReturn: false,
         isRenewal: false,
+        isRefund: true,
       };
       const cashOps = paymentMethod === 'cash'
         ? [...s.cashOperations, {

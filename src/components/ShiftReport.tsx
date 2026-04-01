@@ -22,7 +22,7 @@ export default function ShiftReport({ open, store, shift, onOpenShift }: ShiftRe
   const branchSales = state.sales.filter(s =>
     s.branchId === shift.branchId && inShift(s.date)
   );
-  const subSales = branchSales.filter(s => s.type === 'subscription' && !s.isReturn);
+  const subSales = branchSales.filter(s => s.type === 'subscription' && !s.isRefund);
 
   const newClients = state.clients.filter(c =>
     c.branchId === shift.branchId && inShift(c.createdAt)
@@ -30,16 +30,16 @@ export default function ShiftReport({ open, store, shift, onOpenShift }: ShiftRe
 
   const newClientsWithPurchase = subSales.filter(s => s.isFirstSubscription).length;
   const renewals = subSales.filter(s => s.isRenewal).length;
-  const returns = branchSales.filter(s => s.isReturn).length;
+  const returns = branchSales.filter(s => s.isRefund).length;
 
-  const totalRevenue = branchSales.filter(s => !s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
-  const cashRevenue = branchSales.filter(s => !s.isReturn && s.paymentMethod === 'cash').reduce((sum, s) => sum + s.finalPrice, 0);
-  const cardRevenue = branchSales.filter(s => !s.isReturn && s.paymentMethod === 'card').reduce((sum, s) => sum + s.finalPrice, 0);
-  const returnAmount = branchSales.filter(s => s.isReturn).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  const totalRevenue = branchSales.filter(s => !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
+  const cashRevenue = branchSales.filter(s => !s.isRefund && s.paymentMethod === 'cash').reduce((sum, s) => sum + s.finalPrice, 0);
+  const cardRevenue = branchSales.filter(s => !s.isRefund && s.paymentMethod === 'card').reduce((sum, s) => sum + s.finalPrice, 0);
+  const returnAmount = branchSales.filter(s => s.isRefund).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
   // Остаток в кассе на конец смены
-  const allCashSales = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && !s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
-  const allCashReturns = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && s.isReturn).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  const allCashSales = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
+  const allCashReturns = state.sales.filter(s => s.branchId === shift.branchId && s.paymentMethod === 'cash' && s.isRefund).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
   const allCashExpenses = state.expenses.filter(e => e.branchId === shift.branchId && e.paymentMethod === 'cash').reduce((sum, e) => sum + e.amount, 0);
   const cashOps = state.cashOperations.filter(o => o.branchId === shift.branchId);
   const depositsTotal = cashOps.filter(o => o.type === 'deposit').reduce((sum, o) => sum + o.amount, 0);

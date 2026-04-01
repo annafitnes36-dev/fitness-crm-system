@@ -78,9 +78,9 @@ export default function Finance({ store }: FinanceProps) {
   const filteredSales = branchSales.filter(s => inOpPeriod(s.date));
   const filteredVisits = branchVisits.filter(v => v.isSingleVisit && v.status === 'attended' && inOpPeriod(v.date));
 
-  const subRevenue = filteredSales.filter(s => s.type === 'subscription' && !s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
+  const subRevenue = filteredSales.filter(s => s.type === 'subscription' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
   const singleVisitRevenue = filteredVisits.reduce((sum, v) => sum + v.price, 0);
-  const returnsTotal = filteredSales.filter(s => s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
+  const returnsTotal = filteredSales.filter(s => s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
   const totalRevenue = subRevenue + singleVisitRevenue - returnsTotal;
 
   const byMonth: Record<string, { sub: number; single: number; cash: number; card: number }> = {};
@@ -98,13 +98,13 @@ export default function Finance({ store }: FinanceProps) {
     ...filteredSales.map(s => ({
       id: s.id,
       date: s.date,
-      type: s.isReturn ? 'Возврат' : s.type === 'subscription' ? 'Абонемент' : 'Разовое',
+      type: s.isRefund ? 'Возврат' : s.type === 'subscription' ? 'Абонемент' : 'Разовое',
       client: state.clients.find(c => c.id === s.clientId),
       item: s.itemName,
       amount: s.finalPrice,
       method: s.paymentMethod,
-      isIncome: !s.isReturn,
-      isReturn: s.isReturn,
+      isIncome: !s.isRefund,
+      isReturn: s.isRefund,
     })),
     ...filteredVisits.map(v => {
       const entry = state.schedule.find(e => e.id === v.scheduleEntryId);

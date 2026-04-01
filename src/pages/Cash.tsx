@@ -23,11 +23,11 @@ export default function Cash({ store }: CashProps) {
   const [comment, setComment] = useState('');
   const [filterDate, setFilterDate] = useState('');
 
-  // Продажи наличными (без возвратов) и возвраты наличными
-  const cashSales = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && !s.isReturn);
+  // Продажи наличными (без возвратов денег) и возвраты денег наличными
+  const cashSales = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && !s.isRefund);
   const cashSalesTotal = cashSales.reduce((sum, s) => sum + s.finalPrice, 0);
 
-  const cashReturns = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && s.isReturn);
+  const cashReturns = state.sales.filter(s => s.branchId === branchId && s.paymentMethod === 'cash' && s.isRefund);
   const cashReturnsTotal = cashReturns.reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
   // Расходы наличными по филиалу
