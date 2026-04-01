@@ -58,8 +58,27 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   }, [showStatusMenu]);
 
   const cat = getClientCategory(client);
-  const sub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
   const allSubs = state.subscriptions.filter(s => s.clientId === client.id);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Активные абонементы: active, pending, frozen (не истёк срок, не возврат, не 0 занятий)
+  const activeSubs = allSubs.filter(s => {
+    if (s.status === 'returned') return false;
+    if (s.status === 'expired') return false;
+    if (s.status !== 'active' && s.status !== 'pending' && s.status !== 'frozen') return false;
+    // Проверяем срок
+    const endDate = new Date(s.endDate);
+    endDate.setHours(0, 0, 0, 0);
+    if (endDate < today) return false;
+    // Проверяем лимит занятий
+    if (s.sessionsLeft !== 'unlimited' && (s.sessionsLeft as number) <= 0) return false;
+    return true;
+  });
+
+  // Для обратной совместимости с freeze/extend/return — берём первый активный абонемент
+  const sub = activeSubs[0] || null;
   const visits = state.visits.filter(v => v.clientId === client.id);
   const sales = state.sales.filter(s => s.clientId === client.id);
   const branch = state.branches.find(b => b.id === client.branchId);
@@ -269,60 +288,72 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
           )}
         </div>
 
-        {/* Active subscription */}
+        {/* Active subscriptions */}
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Активный абонемент</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Активные абонементы{activeSubs.length > 1 ? ` (${activeSubs.length})` : ''}
+            </span>
             <button onClick={onSell} className="text-xs bg-foreground text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 flex items-center gap-1">
               <Icon name="Plus" size={12} /> Продать
             </button>
           </div>
 
-          {sub ? (
+          {activeSubs.length > 0 ? (
             <div className="space-y-3">
-              <div className="bg-secondary rounded-xl p-3">
-                <div className="font-medium text-sm">{sub.planName}</div>
-                <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
-                  <div>Куплен: {sub.purchaseDate ? new Date(sub.purchaseDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
-                  <div>До: {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
-                  {sub.activatedAt && (
-                    <div className="col-span-2">Активирован: {new Date(sub.activatedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-                  )}
-                  <div>
-                    Занятий: {sub.sessionsLeft === 'unlimited' ? '∞' : sub.sessionsLeft}
+              {activeSubs.map((activeSub, idx) => {
+                const daysLeft = Math.ceil((new Date(activeSub.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                return (
+                  <div key={activeSub.id} className="space-y-2">
+                    <div className="bg-secondary rounded-xl p-3">
+                      <div className="font-medium text-sm">{activeSub.planName}</div>
+                      {activeSub.status === 'pending' && (
+                        <div className="mt-1 text-xs text-amber-600 font-medium">⏳ Ожидает активации</div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
+                        <div>Куплен: {activeSub.purchaseDate ? new Date(activeSub.purchaseDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
+                        <div>До: {activeSub.endDate ? new Date(activeSub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</div>
+                        {activeSub.activatedAt && (
+                          <div className="col-span-2">Активирован: {new Date(activeSub.activatedAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                        )}
+                        <div>
+                          Занятий: {activeSub.sessionsLeft === 'unlimited' ? '∞' : activeSub.sessionsLeft}
+                        </div>
+                        <div>Заморозок: {activeSub.freezeDaysLeft} дн.</div>
+                      </div>
+                      <div className={`mt-2 text-xs font-medium ${daysLeft <= 3 ? 'text-red-600' : daysLeft <= 7 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Истёк'}
+                      </div>
+                      {activeSub.status === 'frozen' && (
+                        <div className="mt-1 text-xs text-blue-600">❄️ Заморожен до {activeSub.frozenTo}</div>
+                      )}
+                    </div>
+                    {idx === 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowFreeze(true)}
+                          disabled={activeSub.status === 'frozen' || activeSub.freezeDaysLeft <= 0}
+                          className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary disabled:opacity-40 transition-colors"
+                        >
+                          ❄️ Заморозить
+                        </button>
+                        <button
+                          onClick={() => setShowExtend(true)}
+                          className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary transition-colors"
+                        >
+                          ⏱ Изменить срок
+                        </button>
+                        <button
+                          onClick={() => { setReturnPayMethod('cash'); setShowReturn(true); }}
+                          className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
+                        >
+                          ↩ Возврат
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div>Заморозок: {sub.freezeDaysLeft} дн.</div>
-                </div>
-                {daysUntilEnd !== null && (
-                  <div className={`mt-2 text-xs font-medium ${daysUntilEnd <= 3 ? 'text-red-600' : daysUntilEnd <= 7 ? 'text-amber-600' : 'text-green-600'}`}>
-                    {daysUntilEnd > 0 ? `Осталось ${daysUntilEnd} дн.` : 'Истёк'}
-                  </div>
-                )}
-                {sub.status === 'frozen' && (
-                  <div className="mt-2 text-xs text-blue-600">❄️ Заморожен до {sub.frozenTo}</div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowFreeze(true)}
-                  disabled={sub.status === 'frozen' || sub.freezeDaysLeft <= 0}
-                  className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary disabled:opacity-40 transition-colors"
-                >
-                  ❄️ Заморозить
-                </button>
-                <button
-                  onClick={() => setShowExtend(true)}
-                  className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary transition-colors"
-                >
-                  ⏱ Изменить срок
-                </button>
-                <button
-                  onClick={() => { setReturnPayMethod('cash'); setShowReturn(true); }}
-                  className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
-                >
-                  ↩ Возврат
-                </button>
-              </div>
+                );
+              })}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground py-2">Нет активного абонемента</div>
@@ -363,19 +394,56 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
         {/* Purchase history */}
         <div className="px-5 py-4">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">История покупок</div>
-          <div className="space-y-1.5">
-            {sales.slice(-5).reverse().map(s => (
-              <div key={s.id} className="flex items-center justify-between text-sm">
-                <div>
-                  <div className="font-medium">{s.itemName}</div>
-                  <div className="text-xs text-muted-foreground">{s.date} · {s.paymentMethod === 'cash' ? 'Нал' : 'Безнал'}</div>
+          <div className="space-y-2">
+            {sales.slice().reverse().map(s => {
+              // Определяем причину неактивности для абонементов
+              let inactiveReason: string | null = null;
+              if (s.type === 'subscription' && !s.isRefund) {
+                const relatedSub = allSubs.find(sub => {
+                  // Ищем абонемент, проданный в эту дату с таким же планом
+                  return sub.planId === s.itemId && sub.purchaseDate === s.date && sub.clientId === client.id;
+                }) || allSubs.find(sub => sub.planId === s.itemId && sub.clientId === client.id && Math.abs(new Date(sub.purchaseDate).getTime() - new Date(s.date).getTime()) < 86400000);
+
+                if (relatedSub) {
+                  if (relatedSub.status === 'returned') {
+                    inactiveReason = 'Возврат';
+                  } else {
+                    const endDate = new Date(relatedSub.endDate);
+                    endDate.setHours(0, 0, 0, 0);
+                    const todayCheck = new Date();
+                    todayCheck.setHours(0, 0, 0, 0);
+                    const sessionsOut = relatedSub.sessionsLeft !== 'unlimited' && (relatedSub.sessionsLeft as number) <= 0;
+                    const expired = endDate < todayCheck;
+                    if (sessionsOut && expired) {
+                      inactiveReason = 'Занятия закончились · Срок истёк';
+                    } else if (sessionsOut) {
+                      inactiveReason = 'Занятия закончились';
+                    } else if (expired) {
+                      inactiveReason = 'Срок истёк';
+                    }
+                  }
+                }
+              }
+
+              return (
+                <div key={s.id} className="flex items-start justify-between text-sm">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{s.itemName}</div>
+                    <div className="text-xs text-muted-foreground">{s.date} · {s.paymentMethod === 'cash' ? 'Нал' : s.paymentMethod === 'bonus' ? 'Бонусы' : 'Безнал'}</div>
+                    {s.isRefund && (
+                      <div className="text-xs text-red-500 font-medium mt-0.5">↩ Возврат</div>
+                    )}
+                    {!s.isRefund && inactiveReason && (
+                      <div className="text-xs text-orange-500 mt-0.5">⚠ {inactiveReason}</div>
+                    )}
+                  </div>
+                  <div className="text-right ml-3 shrink-0">
+                    <div className={`font-medium ${s.isRefund ? 'text-red-500' : ''}`}>{s.isRefund ? '−' : ''}{s.finalPrice.toLocaleString()} ₽</div>
+                    {s.discount > 0 && <div className="text-xs text-muted-foreground">-{s.discount}%</div>}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-medium">{s.finalPrice.toLocaleString()} ₽</div>
-                  {s.discount > 0 && <div className="text-xs text-muted-foreground">-{s.discount}%</div>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {sales.length === 0 && <div className="text-sm text-muted-foreground">Покупок нет</div>}
           </div>
         </div>
