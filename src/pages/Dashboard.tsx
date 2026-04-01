@@ -32,7 +32,7 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 
 export default function Dashboard({ store, onSell, onNavigate }: DashboardProps) {
-  const { state, getClientCategory, deleteInquiry, hideDashboardItem } = store;
+  const { state, getClientCategory, deleteInquiry, hideDashboardItem, restoreDashboardItem } = store;
   const now = new Date();
 
   // Навигация по месяцам (только когда period === 'month')
@@ -62,7 +62,10 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const hiddenIds = new Set(state.dashboardHiddenIds || []);
 
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
-  const monthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date) && !hiddenIds.has(s.id));
+  // Все продажи за период (включая скрытые) — для детального просмотра в модале
+  const allMonthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
+  // Видимые продажи (без скрытых) — для счётчиков в карточках
+  const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id));
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
@@ -88,6 +91,9 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     if (!branchAttendedByClient[v.clientId]) branchAttendedByClient[v.clientId] = [];
     branchAttendedByClient[v.clientId].push(v.date);
   });
+  // Все записи новичков (включая скрытых) — для детального просмотра
+  const allFirstEnrollments = new Set<string>();
+  // Видимые (без скрытых) — для счётчика карточки
   const firstEnrollments = new Set<string>();
   state.visits.filter(v => {
     if (!['attended', 'enrolled', 'missed'].includes(v.status)) return false;
@@ -95,17 +101,24 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     return branchScheduleIds.has(v.scheduleEntryId);
   }).forEach(v => {
     const prevVisits = (branchAttendedByClient[v.clientId] || []).filter(d => d < periodFrom);
-    if (prevVisits.length === 0) firstEnrollments.add(v.clientId);
+    if (prevVisits.length === 0) {
+      allFirstEnrollments.add(v.clientId);
+      if (!hiddenIds.has(v.clientId)) firstEnrollments.add(v.clientId);
+    }
   });
   const firstEnrollmentsCount = firstEnrollments.size;
 
   // Дошло новичков — только те, у кого первый attended-визит в этом филиале попадает в период
+  // Все (включая скрытых) — для детального просмотра
+  const allAttendedNewbies = new Set<string>();
+  // Видимые (без скрытых) — для счётчика
   const attendedNewbies = new Set<string>();
   state.visits.filter(v => v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId)).forEach(v => {
     const clientAttended = branchAttendedByClient[v.clientId] || [];
     const firstDate = [...clientAttended].sort()[0];
     if (firstDate && inPeriod(firstDate) && firstDate === v.date) {
-      attendedNewbies.add(v.clientId);
+      allAttendedNewbies.add(v.clientId);
+      if (!hiddenIds.has(v.clientId)) attendedNewbies.add(v.clientId);
     }
   });
   const attendedNewbiesCount = attendedNewbies.size;
@@ -132,8 +145,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const monthLabel = new Date(browseYear, browseMonthIdx, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-  // Средний чек — только по абонементам
-  const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
+  // Средний чек — только по абонементам (без скрытых)
+  const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date) && !hiddenIds.has(s.id));
   const factAvgCheck = periodSubSales.length > 0 ? Math.round(periodSubSales.reduce((s, x) => s + x.finalPrice, 0) / periodSubSales.length) : 0;
   // Плановый средний чек считаем из плана продаж по абонементам: sum(target * price) / sum(target)
   const planAvgCheck = (() => {
@@ -164,7 +177,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const canDelete = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
   const canDeleteInquiriesOnly = currentStaff?.role === 'admin';
 
-  type DetailRow = { name: string; sub: string; id: string; deleteType: 'inquiry' | 'sale' | 'client' | null };
+  type DetailRow = { name: string; sub: string; id: string; deleteType: 'inquiry' | 'sale' | 'client' | 'hide' | null };
   type DetailData = { title: string; rows: DetailRow[] };
 
   const detailInquiries: DetailData = {
@@ -172,13 +185,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     rows: [
       ...state.inquiries.filter(i => i.branchId === state.currentBranchId && inPeriod(i.date)).map((i: Inquiry) => ({
         name: i.name || '—',
-        sub: `${fmtDate(i.date)} · ${i.source || 'источник не указан'}`,
+        sub: `${fmtDate(i.date)} · ${i.source || 'источник не указан'}${hiddenIds.has(i.id) ? ' · скрыто с дашборда' : ''}`,
         id: i.id,
         deleteType: 'inquiry' as const,
       })),
       ...branchClients.filter(c => inPeriod(c.createdAt)).map(c => ({
         name: clientName(c),
-        sub: `${fmtDate(c.createdAt)} · регистрация клиента`,
+        sub: `${fmtDate(c.createdAt)} · регистрация клиента${hiddenIds.has(c.id) ? ' · скрыто с дашборда' : ''}`,
         id: c.id,
         deleteType: 'client' as const,
       })),
@@ -187,43 +200,46 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const detailFirstEnrollments: DetailData = {
     title: 'Записи на пробную тренировку',
-    rows: Array.from(firstEnrollments).map(clientId => {
+    rows: Array.from(allFirstEnrollments).map(clientId => {
       const c = state.clients.find(cl => cl.id === clientId);
       const visit = state.visits.find(v => branchScheduleIds.has(v.scheduleEntryId) && v.clientId === clientId && inPeriod(v.date));
       const entry = visit ? state.schedule.find(e => e.id === visit.scheduleEntryId) : null;
       const tt = entry ? state.trainingTypes.find(t => t.id === entry.trainingTypeId) : null;
+      const isHidden = hiddenIds.has(clientId);
       return {
         name: c ? clientName(c) : clientId,
-        sub: `${visit ? fmtDate(visit.date) : '—'}${tt ? ' · ' + tt.name : ''}`,
+        sub: `${visit ? fmtDate(visit.date) : '—'}${tt ? ' · ' + tt.name : ''}${isHidden ? ' · скрыто с дашборда' : ''}`,
         id: clientId,
-        deleteType: null,
+        deleteType: 'hide' as const,
       };
     }),
   };
 
   const detailAttendedNewbies: DetailData = {
     title: 'Дошли новички (первый визит)',
-    rows: Array.from(attendedNewbies).map(clientId => {
+    rows: Array.from(allAttendedNewbies).map(clientId => {
       const c = state.clients.find(cl => cl.id === clientId);
       const dates = branchAttendedByClient[clientId] || [];
       const firstDate = [...dates].sort()[0];
+      const isHidden = hiddenIds.has(clientId);
       return {
         name: c ? clientName(c) : clientId,
-        sub: firstDate ? fmtDate(firstDate) : '—',
+        sub: `${firstDate ? fmtDate(firstDate) : '—'}${isHidden ? ' · скрыто с дашборда' : ''}`,
         id: clientId,
-        deleteType: null,
+        deleteType: 'hide' as const,
       };
     }),
   };
 
-  const firstTimeSubSales = monthSubSales.filter(s => s.isFirstSubscription);
+  const firstTimeSubSales = allMonthSubSales.filter(s => s.isFirstSubscription);
   const detailFirstTimeSubs: DetailData = {
     title: 'Купили абонемент (новички)',
     rows: firstTimeSubSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
+      const isHidden = hiddenIds.has(s.id);
       return {
         name: c ? clientName(c) : '—',
-        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽`,
+        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽${isHidden ? ' · скрыто с дашборда' : ''}`,
         id: s.id,
         deleteType: 'sale' as const,
       };
@@ -232,12 +248,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const detailTotalSubs: DetailData = {
     title: 'Все продажи абонементов',
-    rows: monthSubSales.map(s => {
+    rows: allMonthSubSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
       const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возврат' : '';
+      const isHidden = hiddenIds.has(s.id);
       return {
         name: c ? clientName(c) : '—',
-        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽${tag ? ' · ' + tag : ''}`,
+        sub: `${fmtDate(s.date)} · ${s.itemName} · ${s.finalPrice.toLocaleString()} ₽${tag ? ' · ' + tag : ''}${isHidden ? ' · скрыто с дашборда' : ''}`,
         id: s.id,
         deleteType: 'sale' as const,
       };
@@ -256,10 +273,15 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   };
   const activeDetail = activeDetailKey ? detailMap[activeDetailKey] : null;
 
-  const handleDeleteRow = (row: DetailRow) => {
+  const handleHideRow = (row: DetailRow) => {
     if (!row.deleteType) return;
     if (row.deleteType === 'inquiry') deleteInquiry(row.id);
     else hideDashboardItem(row.id);
+    // 'sale', 'client', 'hide' — все через hideDashboardItem (скрывает без удаления)
+  };
+
+  const handleRestoreRow = (id: string) => {
+    restoreDashboardItem(id);
   };
 
   return (
@@ -556,27 +578,41 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
               <div className="py-10 text-center text-sm text-muted-foreground">Нет данных за выбранный период</div>
             )}
             <div className="divide-y divide-border">
-              {activeDetail?.rows.map((row, i) => (
-                <div key={i} className="py-2.5 flex items-start justify-between gap-2">
+              {activeDetail?.rows.map((row, i) => {
+                const isHidden = hiddenIds.has(row.id) && row.deleteType !== 'inquiry';
+                return (
+                <div key={i} className={`py-2.5 flex items-start justify-between gap-2 ${isHidden ? 'opacity-50' : ''}`}>
                   <div className="min-w-0">
                     <div className="text-sm font-medium">{row.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
                   </div>
                   {(canDelete && row.deleteType || canDeleteInquiriesOnly && row.deleteType === 'inquiry') && (
-                    <button
-                      onClick={() => handleDeleteRow(row)}
-                      className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1 rounded"
-                      title="Удалить"
-                    >
-                      <Icon name="Trash2" size={14} />
-                    </button>
+                    hiddenIds.has(row.id) && row.deleteType !== 'inquiry' ? (
+                      <button
+                        onClick={() => handleRestoreRow(row.id)}
+                        className="shrink-0 text-amber-500 hover:text-emerald-600 transition-colors p-1 rounded"
+                        title="Вернуть в статистику дашборда"
+                      >
+                        <Icon name="Eye" size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleHideRow(row)}
+                        className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1 rounded"
+                        title={row.deleteType === 'inquiry' ? 'Удалить обращение' : 'Исключить из статистики дашборда'}
+                      >
+                        <Icon name={row.deleteType === 'inquiry' ? 'Trash2' : 'EyeOff'} size={14} />
+                      </button>
+                    )
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
-          <div className="pt-2 border-t border-border text-xs text-muted-foreground">
-            Всего: {activeDetail?.rows.length ?? 0}
+          <div className="pt-2 border-t border-border text-xs text-muted-foreground flex items-center justify-between gap-2">
+            <span>Всего: {activeDetail?.rows.length ?? 0}</span>
+            {canDelete && <span className="text-muted-foreground/60">Скрытые позиции исключаются из счётчика, но сохраняются в системе</span>}
           </div>
         </DialogContent>
       </Dialog>

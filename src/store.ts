@@ -3159,6 +3159,13 @@ export function useStore() {
     }));
   };
 
+  const restoreDashboardItem = (id: string) => {
+    update(s => ({
+      ...s,
+      dashboardHiddenIds: (s.dashboardHiddenIds || []).filter(hid => hid !== id),
+    }));
+  };
+
   const addContactChannel = (channel: string) => {
     update(s => ({ ...s, contactChannels: [...s.contactChannels, channel] }));
   };
@@ -3448,7 +3455,7 @@ export function useStore() {
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
     addStaff, updateStaff, removeStaff, setCurrentStaff, generateInviteToken,
-    addInquiry, deleteInquiry, deleteSale, hideDashboardItem,
+    addInquiry, deleteInquiry, deleteSale, hideDashboardItem, restoreDashboardItem,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, updateExpense, deleteExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,

@@ -64,8 +64,8 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
 
   const subPlans = state.subscriptionPlans;
   const addPlans = state.singleVisitPlans;
-  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) для данного филиала
-  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(selectedBranchId));
+  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) — показываем все, у которых есть доплата
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0);
   const allItems = [
     ...subPlans.map(p => ({ ...p, kind: 'sub' as const })),
     ...addPlans.map(p => ({ ...p, kind: 'add' as const })),
@@ -427,7 +427,7 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
   // ── Источники данных ───────────────────────────────────────────────
   const subPlans  = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
   const addPlans  = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
-  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds.includes(selectedBranchId));
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0);
   const branchCats = state.expenseCategories.filter(c => c.branchId === selectedBranchId);
 
   // ── Вычисление плановых значений для месяца ────────────────────────
