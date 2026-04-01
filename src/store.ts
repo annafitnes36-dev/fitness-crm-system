@@ -2833,7 +2833,7 @@ export function useStore() {
     const plan = state.subscriptionPlans.find(p => p.id === planId);
     if (!plan) return;
     const saleDate = opts?.saleDate ?? fmt(new Date());
-    const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription');
+    const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription' && s.branchId === state.currentBranchId);
     const hadSub = prevSubs.length > 0;
     const lastSale = prevSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
     const isReturn = hadSub && lastSale ? (new Date(saleDate).getTime() - new Date(lastSale.date).getTime()) > 60 * 24 * 60 * 60 * 1000 : false;
@@ -2890,8 +2890,8 @@ export function useStore() {
       sales: [...s.sales, newSale],
       bonusTransactions: [
         ...(s.bonusTransactions || []),
-        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
-        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
+        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: state.currentBranchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
+        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: state.currentBranchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
       ],
     }));
   };
@@ -2922,8 +2922,8 @@ export function useStore() {
       sales: [...s.sales, newSale],
       bonusTransactions: [
         ...(s.bonusTransactions || []),
-        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
-        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: plan.branchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
+        ...(bonusUsed > 0 ? [{ id: genId(), clientId, branchId: state.currentBranchId, type: 'spend' as const, amount: bonusUsed, saleId, date: saleDate }] : []),
+        ...(bonusAccrued > 0 && s.bonusSettings?.enabled ? [{ id: genId(), clientId, branchId: state.currentBranchId, type: 'accrual' as const, amount: bonusAccrued, saleId, date: saleDate, expiresAt: s.bonusSettings.expiryDays ? fmt(addDays(new Date(saleDate), s.bonusSettings.expiryDays)) : undefined }] : []),
       ],
     }));
   };
