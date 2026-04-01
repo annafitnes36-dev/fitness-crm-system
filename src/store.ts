@@ -88,6 +88,8 @@ export interface Subscription {
   activatedAt: string | null;
   // дата, после которой автоактивируется если клиент не пришёл (null — уже активен)
   autoActivateDate: string | null;
+  // причина ручной деактивации абонемента
+  deactivationReason?: string;
 }
 
 export interface Client {
@@ -3026,6 +3028,19 @@ export function useStore() {
     update(s => ({ ...s, subscriptions: s.subscriptions.map(sub => sub.id === subId ? { ...sub, ...data } : sub) }));
   };
 
+  // Деактивация абонемента с указанием причины (без возврата средств и без записи в продажи)
+  const deactivateSubscription = (subId: string, reason: string) => {
+    update(s => ({
+      ...s,
+      subscriptions: s.subscriptions.map(sub =>
+        sub.id === subId
+          ? { ...sub, status: 'expired' as const, deactivationReason: reason }
+          : sub
+      ),
+      clients: s.clients.map(c => c.activeSubscriptionId === subId ? { ...c, activeSubscriptionId: null } : c),
+    }));
+  };
+
   const deleteSubscription = (subId: string) => {
     update(s => {
       const sub = s.subscriptions.find(sub => sub.id === subId);
@@ -3569,7 +3584,7 @@ export function useStore() {
     syncStatus,
     addClient, updateClient, deleteClient, addClientToBranch,
     sellSubscription, sellSingleVisit, sellExtra,
-    freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription, deleteSubscription,
+    freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription, deactivateSubscription, deleteSubscription,
     addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,
     autoActivatePendingSubscriptions,
     addBranch, updateBranch, removeBranch,

@@ -273,11 +273,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     }),
   };
 
+  // В детале "Продаж всего" — только реальные продажи: без возвратов (isRefund) и без продаж по которым был сделан возврат
+  const detailTotalSubsSales = allMonthSubSales.filter(s => !s.isRefund && !refundedSaleIds.has(s.id));
   const detailTotalSubs: DetailData = {
     title: 'Все продажи абонементов',
-    rows: allMonthSubSales.map(s => {
+    rows: detailTotalSubsSales.map(s => {
       const c = state.clients.find(cl => cl.id === s.clientId);
-      const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возвращение' : s.isRefund ? 'возврат' : '';
+      const tag = s.isFirstSubscription ? 'новый' : s.isRenewal ? 'продление' : s.isReturn ? 'возвращение' : '';
       const isHidden = hiddenIds.has(s.id);
       return {
         name: c ? clientName(c) : '—',

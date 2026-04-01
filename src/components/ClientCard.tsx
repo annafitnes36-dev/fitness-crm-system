@@ -23,10 +23,12 @@ const CHANNEL_ICONS: Record<string, string> = {
 };
 
 export default function ClientCard({ client, store, onClose, onSell }: ClientCardProps) {
-  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, deleteSubscription, enrollClient, updateClient, deleteClient, getClientBonusBalance } = store;
+  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, deactivateSubscription, deleteSubscription, enrollClient, updateClient, deleteClient, getClientBonusBalance } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
+  const [showDeactivate, setShowDeactivate] = useState(false);
+  const [deactivateReason, setDeactivateReason] = useState('');
   const [showDeleteSub, setShowDeleteSub] = useState(false);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   const [returnPayMethod, setReturnPayMethod] = useState<'cash' | 'card'>('cash');
@@ -346,6 +348,12 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                         ⏱ Изменить срок
                       </button>
                       <button
+                        onClick={() => { setSelectedSubId(activeSub.id); setDeactivateReason(''); setShowDeactivate(true); }}
+                        className="flex-1 text-xs border border-orange-200 text-orange-600 rounded-lg py-2 hover:bg-orange-50 transition-colors"
+                      >
+                        🚫 Деактивировать
+                      </button>
+                      <button
                         onClick={() => { setSelectedSubId(activeSub.id); setReturnPayMethod('cash'); setShowReturn(true); }}
                         className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
                       >
@@ -414,6 +422,8 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                 if (relatedSub) {
                   if (relatedSub.status === 'returned') {
                     inactiveReason = 'Возврат';
+                  } else if (relatedSub.status === 'expired' && relatedSub.deactivationReason) {
+                    inactiveReason = `Деактивирован: ${relatedSub.deactivationReason}`;
                   } else {
                     const endDate = new Date(relatedSub.endDate);
                     endDate.setHours(0, 0, 0, 0);
@@ -593,6 +603,49 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
               Сохранить
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate subscription modal */}
+      <Dialog open={showDeactivate} onOpenChange={(open) => { setShowDeactivate(open); if (!open) setDeactivateReason(''); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="flex items-center gap-2 text-orange-600"><span>🚫</span> Деактивация абонемента</DialogTitle></DialogHeader>
+          {(() => {
+            const deactivateSub = state.subscriptions.find(s => s.id === selectedSubId);
+            if (!deactivateSub) return null;
+            return (
+              <div className="space-y-4">
+                <div className="bg-secondary/50 rounded-lg px-4 py-3 text-sm">
+                  <div className="font-medium">{deactivateSub.planName}</div>
+                  <div className="text-muted-foreground text-xs mt-1">Абонемент будет деактивирован без возврата средств.</div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Причина деактивации <span className="text-red-500">*</span></Label>
+                  <Textarea
+                    value={deactivateReason}
+                    onChange={e => setDeactivateReason(e.target.value)}
+                    placeholder="Введите причину..."
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowDeactivate(false); setDeactivateReason(''); }}>Отмена</Button>
+                  <Button
+                    disabled={!deactivateReason.trim()}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-40"
+                    onClick={() => {
+                      deactivateSubscription(deactivateSub.id, deactivateReason.trim());
+                      setShowDeactivate(false);
+                      setDeactivateReason('');
+                    }}
+                  >
+                    Деактивировать
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
