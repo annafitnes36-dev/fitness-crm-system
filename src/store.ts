@@ -422,7 +422,12 @@ const defaultSingleVisitPlans: SingleVisitPlan[] = [
 ];
 
 const today = new Date();
-const fmt = (d: Date) => d.toISOString().split('T')[0];
+const fmt = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
 const defaultClients: Client[] = [
@@ -2989,7 +2994,7 @@ export function useStore() {
         discount: 0,
         finalPrice: -sub.price,
         paymentMethod,
-        date: new Date().toISOString().split('T')[0],
+        date: fmt(new Date()),
         branchId: sub.branchId,
         isFirstSubscription: false,
         isReturn: false,

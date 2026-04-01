@@ -12,22 +12,42 @@ const MONTH_NAMES = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ];
 
+// Локальная дата без сдвига часового пояса
+function getLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function Sales({ store, onSell }: SalesProps) {
   const { state, getClientFullName } = store;
   const now = new Date();
 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-indexed
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
 
-  const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
+  const branches = state.branches || [];
+
+  // Фильтр по филиалу
+  const branchSales = state.sales.filter(s => {
+    if (selectedBranchId === 'all') return true;
+    return s.branchId === selectedBranchId;
+  });
 
   // Определяем доступные месяцы (из реальных продаж + текущий)
   const availableMonths = new Set<string>();
   availableMonths.add(`${now.getFullYear()}-${now.getMonth()}`);
   branchSales.forEach(s => {
     if (s.date) {
-      const d = new Date(s.date);
-      availableMonths.add(`${d.getFullYear()}-${d.getMonth()}`);
+      // Парсим дату локально, без UTC-сдвига
+      const parts = s.date.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0]);
+        const m = parseInt(parts[1]) - 1; // 0-indexed
+        availableMonths.add(`${y}-${m}`);
+      }
     }
   });
 
@@ -39,10 +59,10 @@ export default function Sales({ store, onSell }: SalesProps) {
     })
     .sort((a, b) => b.year - a.year || b.month - a.month);
 
-  const monthStart = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
-  const monthEnd = new Date(selectedYear, selectedMonth + 1, 1).toISOString().split('T')[0];
+  // Фильтр по месяцу: используем строковое сравнение YYYY-MM-DD
+  const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+  const monthSales = branchSales.filter(s => s.date && s.date.startsWith(monthPrefix));
 
-  const monthSales = branchSales.filter(s => s.date >= monthStart && s.date < monthEnd);
   const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
   const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
@@ -79,38 +99,71 @@ export default function Sales({ store, onSell }: SalesProps) {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Переключатель месяцев */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
-          <button
-            onClick={handlePrev}
-            disabled={!canGoPrev}
-            className="p-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Icon name="ChevronLeft" size={16} />
-          </button>
-          <span className="text-sm font-medium min-w-[140px] text-center">
-            {MONTH_NAMES[selectedMonth]} {selectedYear}
-            {isCurrentMonth && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">(текущий)</span>
-            )}
-          </span>
-          <button
-            onClick={handleNext}
-            disabled={!canGoNext}
-            className="p-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Icon name="ChevronRight" size={16} />
-          </button>
+      {/* Верхняя панель: переключатель месяцев + филиалы */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {/* Переключатель месяцев */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
+            <button
+              onClick={handlePrev}
+              disabled={!canGoPrev}
+              className="p-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Icon name="ChevronLeft" size={16} />
+            </button>
+            <span className="text-sm font-medium min-w-[140px] text-center">
+              {MONTH_NAMES[selectedMonth]} {selectedYear}
+              {isCurrentMonth && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(текущий)</span>
+              )}
+            </span>
+            <button
+              onClick={handleNext}
+              disabled={!canGoNext}
+              className="p-1 rounded-lg hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Icon name="ChevronRight" size={16} />
+            </button>
+          </div>
+
+          {!isCurrentMonth && (
+            <button
+              onClick={() => { setSelectedYear(now.getFullYear()); setSelectedMonth(now.getMonth()); }}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              Текущий месяц
+            </button>
+          )}
         </div>
 
-        {!isCurrentMonth && (
-          <button
-            onClick={() => { setSelectedYear(now.getFullYear()); setSelectedMonth(now.getMonth()); }}
-            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-          >
-            Текущий месяц
-          </button>
+        {/* Переключатель по филиалам */}
+        {branches.length > 1 && (
+          <div className="flex items-center gap-1.5 bg-white border border-border rounded-xl px-2 py-1.5 shadow-sm">
+            <Icon name="MapPin" size={14} className="text-muted-foreground ml-1" />
+            <button
+              onClick={() => setSelectedBranchId('all')}
+              className={`text-xs px-3 py-1.5 rounded-lg transition-colors font-medium ${
+                selectedBranchId === 'all'
+                  ? 'bg-foreground text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              Все
+            </button>
+            {branches.map(branch => (
+              <button
+                key={branch.id}
+                onClick={() => setSelectedBranchId(branch.id)}
+                className={`text-xs px-3 py-1.5 rounded-lg transition-colors font-medium ${
+                  selectedBranchId === branch.id
+                    ? 'bg-foreground text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                {branch.name}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -139,6 +192,11 @@ export default function Sales({ store, onSell }: SalesProps) {
             История продаж
             {monthSales.length > 0 && (
               <span className="ml-2 normal-case font-normal">— {monthSales.length} шт.</span>
+            )}
+            {selectedBranchId !== 'all' && (
+              <span className="ml-2 normal-case font-normal text-foreground">
+                · {branches.find(b => b.id === selectedBranchId)?.name}
+              </span>
             )}
           </div>
           <button onClick={onSell} className="flex items-center gap-1.5 text-sm bg-foreground text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90">
@@ -182,13 +240,14 @@ export default function Sales({ store, onSell }: SalesProps) {
                     </span>
                   </td>
                   <td>
-                    {sale.isFirstSubscription && <span className="text-xs badge-new px-2 py-0.5 rounded-full">Первый</span>}
-                    {sale.isRenewal && <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>}
-                    {sale.isReturn && <span className="text-xs badge-sleeping px-2 py-0.5 rounded-full">Возвращение</span>}
-                    {sale.isRefund && <span className="text-xs badge-churn px-2 py-0.5 rounded-full">Возврат</span>}
+                    {sale.isRefund && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Возврат</span>}
+                    {!sale.isRefund && sale.isFirstSubscription && <span className="text-xs badge-new px-2 py-0.5 rounded-full">Первый</span>}
+                    {!sale.isRefund && sale.isRenewal && <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>}
+                    {!sale.isRefund && sale.isReturn && <span className="text-xs badge-other px-2 py-0.5 rounded-full">Возврат кл.</span>}
+                    {!sale.isRefund && !sale.isFirstSubscription && !sale.isRenewal && !sale.isReturn && '—'}
                   </td>
-                  <td className="text-sm text-muted-foreground">{staffName ? staffName.split(' ').slice(0, 2).join(' ') : '—'}</td>
-                  <td className="text-sm text-muted-foreground">{sale.date ? new Date(sale.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</td>
+                  <td className="text-sm text-muted-foreground">{staffName || '—'}</td>
+                  <td className="text-sm text-muted-foreground">{sale.date}</td>
                 </tr>
               );
             })}
