@@ -55,6 +55,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedBranchId, setSelectedBranchId] = useState(state.currentBranchId);
+  const [savedVersion, setSavedVersion] = useState(0);
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
@@ -74,6 +75,7 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
   type ValMap = Record<string, Record<string, string>>;
   const [values, setValues] = useState<ValMap>({});
 
+  // Загружаем данные только при смене года/филиала или после явного сохранения (savedVersion)
   useEffect(() => {
     const initial: ValMap = {};
     months.forEach(month => {
@@ -85,7 +87,8 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
       });
     });
     setValues(initial);
-  }, [selectedYear, selectedBranchId, state.salesPlans, state.subscriptionPlans, state.singleVisitPlans, state.trainingTypes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear, selectedBranchId, savedVersion]);
 
   const handleChange = (month: string, itemId: string, val: string) => {
     setValues(prev => ({ ...prev, [month]: { ...(prev[month] || {}), [itemId]: val } }));
@@ -100,8 +103,10 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
           items.push({ planId: item.id, target: parseInt(v) || 0 });
         }
       });
-      if (items.length > 0) setSalesPlan(selectedBranchId, month, items);
+      // Сохраняем план для всех месяцев (даже если items пустой — это значит план обнулён)
+      setSalesPlan(selectedBranchId, month, items);
     });
+    setSavedVersion(v => v + 1);
   };
 
   const years = [currentYear - 1, currentYear, currentYear + 1];
