@@ -35,7 +35,7 @@ function useNow() {
 }
 
 export default function Notifications({ store, onSell }: NotificationsProps & { onSell?: (clientId: string) => void }) {
-  const { state, getClientCategory: _gc, getClientFullName, dismissNotification, restoreNotification, failNotification } = store;
+  const { state, getClientCategory, getClientFullName, dismissNotification, restoreNotification, failNotification } = store;
   const now = useNow();
   const [openClientId, setOpenClientId] = useState<string | null>(null);
 
