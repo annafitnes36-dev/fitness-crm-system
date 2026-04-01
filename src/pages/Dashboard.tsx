@@ -64,8 +64,21 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   // Все продажи за период (включая скрытые) — для детального просмотра в модале
   const allMonthSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date));
+
+  // Определяем ID продаж, по которым был сделан возврат:
+  // Для каждого возврата (isRefund) находим последнюю оригинальную продажу клиента с тем же itemId
+  const refundedSaleIds = new Set<string>();
+  branchSales.filter(s => s.isRefund).forEach(refund => {
+    // Ищем среди всех продаж (не только за период) оригинальную — это последняя не-возвратная продажа того же абонемента
+    const original = branchSales
+      .filter(s => !s.isRefund && s.clientId === refund.clientId && s.itemId === refund.itemId && s.date <= refund.date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (original) refundedSaleIds.add(original.id);
+  });
+
   // Видимые продажи (без скрытых и без возвратов денег) — для счётчиков в карточках
-  const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id) && !s.isRefund);
+  // Также исключаем продажи, по которым был сделан возврат
+  const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id) && !s.isRefund && !refundedSaleIds.has(s.id));
   const totalSubs = monthSubSales.length;
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
@@ -91,6 +104,18 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     if (!branchAttendedByClient[v.clientId]) branchAttendedByClient[v.clientId] = [];
     branchAttendedByClient[v.clientId].push(v.date);
   });
+
+  // Клиенты у которых есть абонемент — не считаем как новичков при первой записи
+  // Проверяем: если у клиента на момент записи был куплен абонемент, то он не "новичок" в карточке
+  const clientHasSubAtDate = (clientId: string, visitDate: string): boolean => {
+    return branchSales.some(s =>
+      s.clientId === clientId &&
+      s.type === 'subscription' &&
+      !s.isRefund &&
+      s.date <= visitDate
+    );
+  };
+
   // Все записи новичков (включая скрытых) — для детального просмотра
   const allFirstEnrollments = new Set<string>();
   // Видимые (без скрытых) — для счётчика карточки
@@ -101,7 +126,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     return branchScheduleIds.has(v.scheduleEntryId);
   }).forEach(v => {
     const prevVisits = (branchAttendedByClient[v.clientId] || []).filter(d => d < periodFrom);
-    if (prevVisits.length === 0) {
+    // Если у клиента нет предыдущих посещений И нет абонемента на момент записи — это новичок
+    if (prevVisits.length === 0 && !clientHasSubAtDate(v.clientId, v.date)) {
       allFirstEnrollments.add(v.clientId);
       if (!hiddenIds.has(v.clientId)) firstEnrollments.add(v.clientId);
     }
@@ -116,7 +142,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   state.visits.filter(v => v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId)).forEach(v => {
     const clientAttended = branchAttendedByClient[v.clientId] || [];
     const firstDate = [...clientAttended].sort()[0];
-    if (firstDate && inPeriod(firstDate) && firstDate === v.date) {
+    // Первый визит в периоде — только если у клиента нет абонемента
+    if (firstDate && inPeriod(firstDate) && firstDate === v.date && !clientHasSubAtDate(v.clientId, v.date)) {
       allAttendedNewbies.add(v.clientId);
       if (!hiddenIds.has(v.clientId)) attendedNewbies.add(v.clientId);
     }
@@ -145,8 +172,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const monthLabel = new Date(browseYear, browseMonthIdx, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-  // Средний чек — только по абонементам (без скрытых)
-  const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date) && !hiddenIds.has(s.id));
+  // Средний чек — только по абонементам (без скрытых и без возвратов, без продаж с возвратами)
+  const periodSubSales = branchSales.filter(s => s.type === 'subscription' && inPeriod(s.date) && !hiddenIds.has(s.id) && !s.isRefund && !refundedSaleIds.has(s.id));
   const factAvgCheck = periodSubSales.length > 0 ? Math.round(periodSubSales.reduce((s, x) => s + x.finalPrice, 0) / periodSubSales.length) : 0;
   // Плановый средний чек считаем из плана продаж по абонементам: sum(target * price) / sum(target)
   const planAvgCheck = (() => {

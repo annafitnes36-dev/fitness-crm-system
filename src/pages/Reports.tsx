@@ -79,9 +79,13 @@ function computeFact(
   // Продажи за месяц
   const monthSales = state.sales.filter(s => inMonth(s.date) && branchFilter(s.branchId));
   const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
-  const addSales = monthSales.filter(s => s.type === 'single' || s.type === 'extra');
+  const addSales = monthSales.filter(s => (s.type === 'single' || s.type === 'extra') && !s.isRefund);
+  const monthRefunds = monthSales.filter(s => s.isRefund);
 
-  const revenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);
+  // Выручка = доходы (без возвратов) - суммы возвратов (берём abs т.к. finalPrice может быть отрицательным)
+  const incomeSales = monthSales.filter(s => !s.isRefund);
+  const refundsTotal = monthRefunds.reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  const revenue = incomeSales.reduce((sum, s) => sum + s.finalPrice, 0) - refundsTotal;
   const subscriptionSales = subSales.reduce((sum, s) => sum + s.finalPrice, 0);
   const additionalSales = addSales.reduce((sum, s) => sum + s.finalPrice, 0);
   // Средний чек — только по абонементам

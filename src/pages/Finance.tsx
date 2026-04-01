@@ -80,7 +80,8 @@ export default function Finance({ store }: FinanceProps) {
 
   const subRevenue = filteredSales.filter(s => s.type === 'subscription' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
   const singleVisitRevenue = filteredVisits.reduce((sum, v) => sum + v.price, 0);
-  const returnsTotal = filteredSales.filter(s => s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
+  // finalPrice у возврата может быть отрицательным (хранится как -price), берём абсолютное значение
+  const returnsTotal = filteredSales.filter(s => s.isRefund).reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
   const totalRevenue = subRevenue + singleVisitRevenue - returnsTotal;
 
   // Расходы за тот же период для расчёта прибыли
@@ -97,10 +98,11 @@ export default function Finance({ store }: FinanceProps) {
   filteredSales.forEach(s => {
     const month = s.date.slice(0, 7);
     if (!byMonth[month]) byMonth[month] = { sub: 0, single: 0, cash: 0, card: 0 };
-    if (s.type === 'subscription') byMonth[month].sub += s.finalPrice;
-    else byMonth[month].single += s.finalPrice;
-    if (s.paymentMethod === 'cash') byMonth[month].cash += s.finalPrice;
-    else byMonth[month].card += s.finalPrice;
+    const sign = s.isRefund ? -1 : 1;
+    if (s.type === 'subscription') byMonth[month].sub += sign * Math.abs(s.finalPrice);
+    else byMonth[month].single += sign * Math.abs(s.finalPrice);
+    if (s.paymentMethod === 'cash') byMonth[month].cash += sign * Math.abs(s.finalPrice);
+    else byMonth[month].card += sign * Math.abs(s.finalPrice);
   });
   const months = Object.keys(byMonth).sort().reverse();
 

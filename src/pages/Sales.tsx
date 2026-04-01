@@ -45,10 +45,15 @@ export default function Sales({ store, onSell }: SalesProps) {
   const monthSales = branchSales.filter(s => s.date >= monthStart && s.date < monthEnd);
   const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
-  const totalRevenue = monthSales.reduce((sum, s) => sum + s.finalPrice, 0);
   const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
-  const cashTotal = monthSales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.finalPrice, 0);
-  const cardTotal = monthSales.filter(s => s.paymentMethod === 'card').reduce((sum, s) => sum + s.finalPrice, 0);
+  const refunds = monthSales.filter(s => s.isRefund);
+  const refundsTotal = refunds.reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  // Выручка: все поступления минус возвраты
+  const totalRevenue = monthSales.filter(s => !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0) - refundsTotal;
+  const cashTotal = monthSales.filter(s => s.paymentMethod === 'cash' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0)
+    - refunds.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
+  const cardTotal = monthSales.filter(s => s.paymentMethod === 'card' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0)
+    - refunds.filter(s => s.paymentMethod === 'card').reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
   const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
 

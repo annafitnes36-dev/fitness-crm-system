@@ -61,11 +61,14 @@ function countNotifications(store: StoreType): number {
     if (catMap['last_session']?.enabled && sub && sub.sessionsLeft === 1 && !dismissed.has(`last_session:${client.id}:${sub.id}`)) count++;
     if (catMap['two_weeks']?.enabled && state.sales.some(s => s.clientId === client.id && s.type === 'subscription' && s.date === agoNDays) && !dismissed.has(`two_weeks:${client.id}:${agoNDays}`)) count++;
     const firstDate = clientFirstVisitDate[client.id];
-    if (catMap['first_today']?.enabled && firstDate === todayStr && !dismissed.has(`first_today:${client.id}:${todayStr}`)) count++;
-    if (catMap['first_tomorrow']?.enabled && firstDate === tomorrowStr && !dismissed.has(`first_tomorrow:${client.id}:${tomorrowStr}`)) count++;
+    // Если у клиента есть абонемент до первой тренировки — не показываем "первые" уведомления
+    const clientSubSales = state.sales.filter(s => s.clientId === client.id && s.type === 'subscription' && !s.isRefund);
+    const hasSubBeforeFirst = firstDate ? clientSubSales.some(s => s.date <= firstDate) : clientSubSales.length > 0;
+    if (!hasSubBeforeFirst && catMap['first_today']?.enabled && firstDate === todayStr && !dismissed.has(`first_today:${client.id}:${todayStr}`)) count++;
+    if (!hasSubBeforeFirst && catMap['first_tomorrow']?.enabled && firstDate === tomorrowStr && !dismissed.has(`first_tomorrow:${client.id}:${tomorrowStr}`)) count++;
     if (firstDate === yesterdayStr) {
       const v = state.visits.find(v2 => v2.clientId === client.id && v2.date === yesterdayStr && branchScheduleIds.has(v2.scheduleEntryId));
-      if (catMap['missed_first']?.enabled && v && (v.status === 'missed' || v.status === 'cancelled') && !dismissed.has(`missed_first:${client.id}:${yesterdayStr}`)) count++;
+      if (!hasSubBeforeFirst && catMap['missed_first']?.enabled && v && (v.status === 'missed' || v.status === 'cancelled') && !dismissed.has(`missed_first:${client.id}:${yesterdayStr}`)) count++;
       if (catMap['no_sub_after_first']?.enabled && v && v.status === 'attended' && !state.subscriptions.some(s => s.clientId === client.id) && !dismissed.has(`no_sub_after_first:${client.id}:${yesterdayStr}`)) count++;
     }
   }
