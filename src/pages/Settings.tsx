@@ -62,10 +62,10 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
     return `${selectedYear}-${String(m).padStart(2, '0')}`;
   });
 
-  const subPlans = state.subscriptionPlans;
-  const addPlans = state.singleVisitPlans;
-  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) — показываем все, у которых есть доплата
-  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0);
+  const subPlans = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
+  const addPlans = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
+  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) — показываем только для выбранного филиала
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds?.includes(selectedBranchId));
   const allItems = [
     ...subPlans.map(p => ({ ...p, kind: 'sub' as const })),
     ...addPlans.map(p => ({ ...p, kind: 'add' as const })),

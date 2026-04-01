@@ -152,15 +152,36 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
-  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
+  const branchSubPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
+  const branchSinglePlans = state.singleVisitPlans.filter(p => p.branchId === state.currentBranchId);
+  const branchExtraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds?.includes(state.currentBranchId));
 
-  const planRows = branchPlans.map(plan => {
-    const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
-    const sold = monthSubSales.filter(s => s.itemId === plan.id).length;
-    const left = Math.max(0, target - sold);
-    const pct = target > 0 ? Math.min(100, Math.round((sold / target) * 100)) : null;
-    return { plan, target, sold, left, pct };
-  });
+  const monthSingleSales = branchSales.filter(s => s.type === 'single' && inPeriod(s.date) && !hiddenIds.has(s.id) && !s.isRefund && !refundedSaleIds.has(s.id));
+  const monthExtraSales = branchSales.filter(s => s.type === 'extra' && inPeriod(s.date) && !hiddenIds.has(s.id) && !s.isRefund && !refundedSaleIds.has(s.id));
+
+  const planRows = [
+    ...branchSubPlans.map(plan => {
+      const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
+      const sold = monthSubSales.filter(s => s.itemId === plan.id).length;
+      const left = Math.max(0, target - sold);
+      const pct = target > 0 ? Math.min(100, Math.round((sold / target) * 100)) : null;
+      return { plan, target, sold, left, pct };
+    }),
+    ...branchSinglePlans.map(plan => {
+      const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
+      const sold = monthSingleSales.filter(s => s.itemId === plan.id).length;
+      const left = Math.max(0, target - sold);
+      const pct = target > 0 ? Math.min(100, Math.round((sold / target) * 100)) : null;
+      return { plan, target, sold, left, pct };
+    }),
+    ...branchExtraItems.map(plan => {
+      const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
+      const sold = monthExtraSales.filter(s => s.itemName === plan.extraPriceName).length;
+      const left = Math.max(0, target - sold);
+      const pct = target > 0 ? Math.min(100, Math.round((sold / target) * 100)) : null;
+      return { plan, target, sold, left, pct };
+    }),
+  ];
 
   const totalTarget = planRows.reduce((s, r) => s + r.target, 0);
   const totalSold = planRows.reduce((s, r) => s + r.sold, 0);
@@ -399,13 +420,13 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
           </div>
 
         </div>
-        {branchPlans.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">Нет абонементов для этого филиала</div>
+        {planRows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Нет позиций плана для этого филиала</div>
         ) : (
           <table className="w-full data-table">
             <thead>
               <tr>
-                <th>Абонемент</th>
+                <th>Позиция</th>
                 <th className="text-center">План</th>
                 <th className="text-center">Продано</th>
                 <th className="text-center">Осталось</th>
