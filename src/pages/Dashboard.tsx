@@ -152,7 +152,17 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
-  const branchPlans = state.subscriptionPlans.filter(p => p.branchId === state.currentBranchId);
+  // Если есть план продаж — показываем абонементы из плана; иначе — абонементы филиала (или без привязки к филиалу)
+  const branchPlans = (() => {
+    if (currentPlan && currentPlan.items.length > 0) {
+      // Берём абонементы, которые есть в плане продаж
+      return currentPlan.items
+        .map(item => state.subscriptionPlans.find(p => p.id === item.planId))
+        .filter((p): p is NonNullable<typeof p> => p !== undefined);
+    }
+    // Fallback: абонементы привязанные к текущему филиалу или без привязки
+    return state.subscriptionPlans.filter(p => !p.branchId || p.branchId === state.currentBranchId);
+  })();
 
   const planRows = branchPlans.map(plan => {
     const target = currentPlan?.items.find(i => i.planId === plan.id)?.target ?? 0;
