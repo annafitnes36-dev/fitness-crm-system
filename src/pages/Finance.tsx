@@ -253,7 +253,12 @@ export default function Finance({ store }: FinanceProps) {
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементы</div>
               <div className="text-2xl font-semibold">{subRevenue.toLocaleString()} ₽</div>
-              <div className="text-xs text-muted-foreground mt-1">{filteredSales.filter(s => s.type === 'subscription' && !s.isRefund).length} продаж</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {filteredSales.filter(s => s.type === 'subscription' && !s.isRefund).length} продаж
+                {returnsTotal > 0 && (
+                  <span className="text-red-500 ml-1">· −{returnsTotal.toLocaleString()} ₽ возвраты</span>
+                )}
+              </div>
             </div>
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Разовые визиты</div>

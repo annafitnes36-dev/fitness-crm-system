@@ -23,10 +23,12 @@ const CHANNEL_ICONS: Record<string, string> = {
 };
 
 export default function ClientCard({ client, store, onClose, onSell }: ClientCardProps) {
-  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, enrollClient, updateClient, deleteClient, getClientBonusBalance } = store;
+  const { state, getClientCategory, getClientFullName, freezeSubscription, returnSubscription, updateSubscription, deleteSubscription, enrollClient, updateClient, deleteClient, getClientBonusBalance } = store;
   const [showFreeze, setShowFreeze] = useState(false);
   const [showExtend, setShowExtend] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
+  const [showDeleteSub, setShowDeleteSub] = useState(false);
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   const [returnPayMethod, setReturnPayMethod] = useState<'cash' | 'card'>('cash');
   const [freezeDays, setFreezeDays] = useState(7);
   const [extendDays, setExtendDays] = useState(0);
@@ -119,28 +121,29 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   const daysUntilEnd = sub ? Math.ceil((new Date(sub.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
   const handleFreeze = () => {
-    if (!sub) return;
-    freezeSubscription(sub.id, freezeDays);
+    if (!selectedSubId) return;
+    freezeSubscription(selectedSubId, freezeDays);
     setShowFreeze(false);
   };
 
   const handleExtend = () => {
-    if (!sub) return;
+    const targetSub = selectedSubId ? state.subscriptions.find(s => s.id === selectedSubId) : sub;
+    if (!targetSub) return;
     const addDaysToDate = (d: string, n: number) => {
       const dt = new Date(d);
       dt.setDate(dt.getDate() + n);
       return dt.toISOString().split('T')[0];
     };
-    const updates: Partial<typeof sub> = {};
+    const updates: Partial<typeof targetSub> = {};
     if (extendTargetDate) {
       updates.endDate = extendTargetDate;
     } else if (extendDays > 0) {
-      updates.endDate = addDaysToDate(sub.endDate, extendDays);
+      updates.endDate = addDaysToDate(targetSub.endDate, extendDays);
     }
-    if (extendSessions > 0 && sub.sessionsLeft !== 'unlimited') {
-      updates.sessionsLeft = (sub.sessionsLeft as number) + extendSessions;
+    if (extendSessions > 0 && targetSub.sessionsLeft !== 'unlimited') {
+      updates.sessionsLeft = (targetSub.sessionsLeft as number) + extendSessions;
     }
-    updateSubscription(sub.id, updates);
+    updateSubscription(targetSub.id, updates);
     setExtendDays(0);
     setExtendTargetDate('');
     setExtendSessions(0);
@@ -301,7 +304,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
 
           {activeSubs.length > 0 ? (
             <div className="space-y-3">
-              {activeSubs.map((activeSub, idx) => {
+              {activeSubs.map((activeSub) => {
                 const daysLeft = Math.ceil((new Date(activeSub.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                 return (
                   <div key={activeSub.id} className="space-y-2">
@@ -328,29 +331,33 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                         <div className="mt-1 text-xs text-blue-600">❄️ Заморожен до {activeSub.frozenTo}</div>
                       )}
                     </div>
-                    {idx === 0 && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setShowFreeze(true)}
-                          disabled={activeSub.status === 'frozen' || activeSub.freezeDaysLeft <= 0}
-                          className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary disabled:opacity-40 transition-colors"
-                        >
-                          ❄️ Заморозить
-                        </button>
-                        <button
-                          onClick={() => setShowExtend(true)}
-                          className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary transition-colors"
-                        >
-                          ⏱ Изменить срок
-                        </button>
-                        <button
-                          onClick={() => { setReturnPayMethod('cash'); setShowReturn(true); }}
-                          className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
-                        >
-                          ↩ Возврат
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setSelectedSubId(activeSub.id); setShowFreeze(true); }}
+                        disabled={activeSub.status === 'frozen' || activeSub.freezeDaysLeft <= 0}
+                        className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary disabled:opacity-40 transition-colors"
+                      >
+                        ❄️ Заморозить
+                      </button>
+                      <button
+                        onClick={() => { setSelectedSubId(activeSub.id); setShowExtend(true); }}
+                        className="flex-1 text-xs border border-border rounded-lg py-2 hover:bg-secondary transition-colors"
+                      >
+                        ⏱ Изменить срок
+                      </button>
+                      <button
+                        onClick={() => { setSelectedSubId(activeSub.id); setReturnPayMethod('cash'); setShowReturn(true); }}
+                        className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
+                      >
+                        ↩ Возврат
+                      </button>
+                      <button
+                        onClick={() => { setSelectedSubId(activeSub.id); setShowDeleteSub(true); }}
+                        className="flex-1 text-xs border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors"
+                      >
+                        🗑 Удалить
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -453,15 +460,21 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
       <Dialog open={showFreeze} onOpenChange={setShowFreeze}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Заморозить абонемент</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Количество дней (макс. {sub?.freezeDaysLeft})</Label>
-              <Input type="number" value={freezeDays} min={1} max={sub?.freezeDaysLeft || 30}
-                onChange={e => setFreezeDays(Number(e.target.value))} />
-            </div>
-            <p className="text-sm text-muted-foreground">Срок абонемента будет продлён на {freezeDays} дней.</p>
-            <Button onClick={handleFreeze} className="w-full bg-foreground text-primary-foreground">Заморозить</Button>
-          </div>
+          {(() => {
+            const freezeSub = state.subscriptions.find(s => s.id === selectedSubId) || sub;
+            return (
+              <div className="space-y-4">
+                {freezeSub && <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2 font-medium">{freezeSub.planName}</div>}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Количество дней (макс. {freezeSub?.freezeDaysLeft})</Label>
+                  <Input type="number" value={freezeDays} min={1} max={freezeSub?.freezeDaysLeft || 30}
+                    onChange={e => setFreezeDays(Number(e.target.value))} />
+                </div>
+                <p className="text-sm text-muted-foreground">Срок абонемента будет продлён на {freezeDays} дней.</p>
+                <Button onClick={handleFreeze} className="w-full bg-foreground text-primary-foreground">Заморозить</Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -469,45 +482,53 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
       <Dialog open={showExtend} onOpenChange={v => { setShowExtend(v); if (!v) { setExtendDays(0); setExtendTargetDate(''); setExtendSessions(0); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Изменить срок / лимит</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            {sub && (
-              <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2">
-                Текущая дата окончания: <span className="font-medium text-foreground">{sub.endDate ? new Date(sub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</span>
+          {(() => {
+            const extendSub = state.subscriptions.find(s => s.id === selectedSubId) || sub;
+            return (
+              <div className="space-y-4">
+                {extendSub && (
+                  <>
+                    <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2">
+                      <span className="font-medium text-foreground">{extendSub.planName}</span>
+                      <span className="ml-2">· До: <span className="font-medium text-foreground">{extendSub.endDate ? new Date(extendSub.endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</span></span>
+                    </div>
+                  </>
+                )}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Добавить дней</Label>
+                  <Input
+                    type="number"
+                    value={extendDays || ''}
+                    min={0}
+                    placeholder="0"
+                    disabled={!!extendTargetDate}
+                    onChange={e => setExtendDays(Number(e.target.value))}
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex-1 h-px bg-border" />
+                  <span>или укажите дату напрямую</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Итоговая дата окончания</Label>
+                  <Input
+                    type="date"
+                    value={extendTargetDate}
+                    disabled={extendDays > 0}
+                    onChange={e => setExtendTargetDate(e.target.value)}
+                  />
+                </div>
+                {extendSub && extendSub.sessionsLeft !== 'unlimited' && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Добавить занятий</Label>
+                    <Input type="number" value={extendSessions || ''} min={0} placeholder="0" onChange={e => setExtendSessions(Number(e.target.value))} />
+                  </div>
+                )}
+                <Button onClick={handleExtend} disabled={!extendDays && !extendTargetDate && !extendSessions} className="w-full bg-foreground text-primary-foreground">Применить</Button>
               </div>
-            )}
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Добавить дней</Label>
-              <Input
-                type="number"
-                value={extendDays || ''}
-                min={0}
-                placeholder="0"
-                disabled={!!extendTargetDate}
-                onChange={e => setExtendDays(Number(e.target.value))}
-              />
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="flex-1 h-px bg-border" />
-              <span>или укажите дату напрямую</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Итоговая дата окончания</Label>
-              <Input
-                type="date"
-                value={extendTargetDate}
-                disabled={extendDays > 0}
-                onChange={e => setExtendTargetDate(e.target.value)}
-              />
-            </div>
-            {sub && sub.sessionsLeft !== 'unlimited' && (
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Добавить занятий</Label>
-                <Input type="number" value={extendSessions || ''} min={0} placeholder="0" onChange={e => setExtendSessions(Number(e.target.value))} />
-              </div>
-            )}
-            <Button onClick={handleExtend} disabled={!extendDays && !extendTargetDate && !extendSessions} className="w-full bg-foreground text-primary-foreground">Применить</Button>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -580,13 +601,13 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle className="flex items-center gap-2 text-red-600"><span>↩</span> Возврат абонемента</DialogTitle></DialogHeader>
           {(() => {
-            const sub = state.subscriptions.find(s => s.id === client.activeSubscriptionId);
-            if (!sub) return null;
+            const returnSub = state.subscriptions.find(s => s.id === selectedSubId);
+            if (!returnSub) return null;
             return (
               <div className="space-y-4">
                 <div className="bg-secondary/50 rounded-lg px-4 py-3 text-sm">
-                  <div className="font-medium">{sub.planName}</div>
-                  <div className="text-muted-foreground">Сумма возврата: <span className="font-semibold text-foreground">{sub.price.toLocaleString('ru-RU')} ₽</span></div>
+                  <div className="font-medium">{returnSub.planName}</div>
+                  <div className="text-muted-foreground">Сумма возврата: <span className="font-semibold text-foreground">{returnSub.price.toLocaleString('ru-RU')} ₽</span></div>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground mb-2 block">Способ возврата</Label>
@@ -609,11 +630,39 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                   )}
                 </div>
                 <Button
-                  onClick={() => { returnSubscription(sub.id, returnPayMethod, state.currentStaffId); setShowReturn(false); }}
+                  onClick={() => { returnSubscription(returnSub.id, returnPayMethod, state.currentStaffId); setShowReturn(false); }}
                   className="w-full bg-red-500 hover:bg-red-600 text-white"
                 >
-                  Подтвердить возврат {sub.price.toLocaleString('ru-RU')} ₽
+                  Подтвердить возврат {returnSub.price.toLocaleString('ru-RU')} ₽
                 </Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete subscription confirmation modal */}
+      <Dialog open={showDeleteSub} onOpenChange={setShowDeleteSub}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="text-destructive">Удалить абонемент?</DialogTitle></DialogHeader>
+          {(() => {
+            const deleteSub = state.subscriptions.find(s => s.id === selectedSubId);
+            if (!deleteSub) return null;
+            return (
+              <div className="space-y-4">
+                <div className="bg-secondary/50 rounded-lg px-4 py-3 text-sm">
+                  <div className="font-medium">{deleteSub.planName}</div>
+                  <div className="text-muted-foreground text-xs mt-1">Абонемент будет удалён без возврата средств и нигде не будет отображаться.</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowDeleteSub(false)}>Отмена</Button>
+                  <Button
+                    className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => { deleteSubscription(deleteSub.id); setShowDeleteSub(false); }}
+                  >
+                    Удалить
+                  </Button>
+                </div>
               </div>
             );
           })()}

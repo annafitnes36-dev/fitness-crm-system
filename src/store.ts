@@ -3026,6 +3026,29 @@ export function useStore() {
     update(s => ({ ...s, subscriptions: s.subscriptions.map(sub => sub.id === subId ? { ...sub, ...data } : sub) }));
   };
 
+  const deleteSubscription = (subId: string) => {
+    update(s => {
+      const sub = s.subscriptions.find(sub => sub.id === subId);
+      if (!sub) return s;
+      // Удаляем саму продажу абонемента и связанные возвраты
+      const filteredSales = s.sales.filter(sale => {
+        if (sale.type === 'subscription' && sale.clientId === sub.clientId && sale.itemId === sub.planId) {
+          // Удаляем оригинальную продажу (совпадает по дате покупки)
+          if (!sale.isRefund && sale.date === sub.purchaseDate) return false;
+          // Удаляем возврат, связанный с этим абонементом
+          if (sale.isRefund && sale.itemName === `Возврат: ${sub.planName}`) return false;
+        }
+        return true;
+      });
+      return {
+        ...s,
+        subscriptions: s.subscriptions.filter(sub => sub.id !== subId),
+        sales: filteredSales,
+        clients: s.clients.map(c => c.activeSubscriptionId === subId ? { ...c, activeSubscriptionId: null } : c),
+      };
+    });
+  };
+
   // Schedule
   const addScheduleEntry = (entry: Omit<ScheduleEntry, 'id' | 'enrolledClientIds'> & { enrolledClientIds?: string[] }) => {
     const newEntry: ScheduleEntry = { ...entry, id: genId(), enrolledClientIds: entry.enrolledClientIds || [] };
@@ -3546,7 +3569,7 @@ export function useStore() {
     syncStatus,
     addClient, updateClient, deleteClient, addClientToBranch,
     sellSubscription, sellSingleVisit, sellExtra,
-    freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription,
+    freezeSubscription, unfreezeSubscription, returnSubscription, updateSubscription, deleteSubscription,
     addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule,
     autoActivatePendingSubscriptions,
     addBranch, updateBranch, removeBranch,
