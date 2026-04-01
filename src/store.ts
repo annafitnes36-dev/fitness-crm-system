@@ -350,8 +350,8 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     editDeleteOperations: false, exportData: false, addClients: true, viewClientCards: true,
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
-    manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuCash: true, menuBranches: false, menuStaff: false, menuSettings: false,
+    manageStaff: false, manageSettings: false, manageSalesPlan: true,
+    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuCash: true, menuBranches: false, menuStaff: false, menuSettings: true,
   },
   trainer: {
     viewDirectorDashboard: false, viewAdminDashboard: false, viewFinanceHistory: false,
