@@ -2439,6 +2439,7 @@ const PATCH_KEYS: (keyof AppState)[] = [
   'notificationCategories', 'adSources', 'contactChannels',
   'salesPlans', 'monthlyPlans', 'expensePlans', 'expenseCategories',
   'bonusSettings', 'projectCode', 'dashboardHiddenIds',
+  'deletedClientIds',
   'importedCvetnoiV1', 'importedCvetnoiV2', 'importedCvetnoiV3',
   'importedBorV1', 'importedBorV2', 'importedTsentrV1', 'importedOlimpV1',
 ];
@@ -2687,6 +2688,16 @@ export function useStore() {
           ...(cur.deletedClientIds || []),
           ...(dbState.deletedClientIds || []),
         ]);
+        // Мёрдж salesPlans: объединяем планы из БД с локальными (приоритет у локальных — они свежее)
+        const mergeSalesPlans = (dbPlans: SalesPlan[], curPlans: SalesPlan[]): SalesPlan[] => {
+          const curMap = new Map(curPlans.map(p => [`${p.branchId}::${p.month}`, p]));
+          const result: SalesPlan[] = [...curPlans];
+          dbPlans.forEach(dbPlan => {
+            const key = `${dbPlan.branchId}::${dbPlan.month}`;
+            if (!curMap.has(key)) result.push(dbPlan);
+          });
+          return result;
+        };
         return {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
@@ -2701,6 +2712,7 @@ export function useStore() {
           shifts: mergeByIdUpdating(dbState.shifts || [], cur.shifts || []),
           bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || cur.bonusSettings,
+          salesPlans: mergeSalesPlans(dbState.salesPlans || [], cur.salesPlans || []),
           currentStaffId: cur.currentStaffId,
           currentBranchId: cur.currentBranchId,
         };
