@@ -162,6 +162,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
   const canDelete = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+  const canDeleteInquiriesOnly = currentStaff?.role === 'admin';
 
   type DetailRow = { name: string; sub: string; id: string; deleteType: 'inquiry' | 'sale' | 'client' | null };
   type DetailData = { title: string; rows: DetailRow[] };
@@ -561,7 +562,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
                     <div className="text-sm font-medium">{row.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
                   </div>
-                  {canDelete && row.deleteType && (
+                  {(canDelete && row.deleteType || canDeleteInquiriesOnly && row.deleteType === 'inquiry') && (
                     <button
                       onClick={() => handleDeleteRow(row)}
                       className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1 rounded"
