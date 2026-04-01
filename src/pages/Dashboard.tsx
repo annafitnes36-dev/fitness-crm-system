@@ -18,8 +18,7 @@ function getPeriodDates(period: PeriodKey, customFrom: string, customTo: string,
   if (period === 'week') { const m = new Date(now); m.setDate(now.getDate() - now.getDay() + 1); return { from: fmt(m), to: today }; }
   if (period === 'month') {
     const from = fmt(new Date(browseYear, browseMonthIdx, 1));
-    const isCurrentMonth = browseYear === now.getFullYear() && browseMonthIdx === now.getMonth();
-    const to = isCurrentMonth ? today : fmt(new Date(browseYear, browseMonthIdx + 1, 0));
+    const to = fmt(new Date(browseYear, browseMonthIdx + 1, 0));
     return { from, to };
   }
   if (period === 'quarter') { const q = Math.floor(now.getMonth() / 3); return { from: fmt(new Date(now.getFullYear(), q * 3, 1)), to: today }; }

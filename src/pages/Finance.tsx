@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -12,24 +11,79 @@ interface FinanceProps {
 }
 
 type FinanceTab = 'operations' | 'expenses';
+type OpPeriodKey = 'month' | 'quarter' | 'year' | 'all' | 'custom';
+
+const OP_PERIODS: { key: OpPeriodKey; label: string }[] = [
+  { key: 'month', label: 'Месяц' },
+  { key: 'quarter', label: 'Квартал' },
+  { key: 'year', label: 'Год' },
+  { key: 'all', label: 'Всё время' },
+  { key: 'custom', label: 'Период' },
+];
+
+function getOpDates(period: OpPeriodKey, browseYear: number, browseMonthIdx: number, customFrom: string, customTo: string) {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const today = fmt(now);
+  if (period === 'month') {
+    return {
+      from: fmt(new Date(browseYear, browseMonthIdx, 1)),
+      to: fmt(new Date(browseYear, browseMonthIdx + 1, 0)),
+    };
+  }
+  if (period === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    return { from: fmt(new Date(now.getFullYear(), q * 3, 1)), to: today };
+  }
+  if (period === 'year') return { from: fmt(new Date(now.getFullYear(), 0, 1)), to: today };
+  if (period === 'all') return { from: '2000-01-01', to: '2099-12-31' };
+  return { from: customFrom || fmt(new Date(browseYear, browseMonthIdx, 1)), to: customTo || today };
+}
 
 export default function Finance({ store }: FinanceProps) {
   const { state, addExpense, updateExpense, deleteExpense } = store;
   const [tab, setTab] = useState<FinanceTab>('operations');
 
-  // ── Вкладка операций ─────────────────────────────────────────────────
+  // ── Период для операций ───────────────────────────────────────────────
+  const now = new Date();
+  const [opPeriod, setOpPeriod] = useState<OpPeriodKey>('month');
+  const [browseYear, setBrowseYear] = useState(now.getFullYear());
+  const [browseMonthIdx, setBrowseMonthIdx] = useState(now.getMonth());
+  const [opCustomFrom, setOpCustomFrom] = useState('');
+  const [opCustomTo, setOpCustomTo] = useState('');
+
+  const isCurrentMonth = browseYear === now.getFullYear() && browseMonthIdx === now.getMonth();
+  const goPrevMonth = () => {
+    if (browseMonthIdx === 0) { setBrowseYear(y => y - 1); setBrowseMonthIdx(11); }
+    else setBrowseMonthIdx(m => m - 1);
+  };
+  const goNextMonth = () => {
+    if (isCurrentMonth) return;
+    if (browseMonthIdx === 11) { setBrowseYear(y => y + 1); setBrowseMonthIdx(0); }
+    else setBrowseMonthIdx(m => m + 1);
+  };
+  const monthLabel = new Date(browseYear, browseMonthIdx, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+  const { from: opFrom, to: opTo } = getOpDates(opPeriod, browseYear, browseMonthIdx, opCustomFrom, opCustomTo);
+  const inOpPeriod = (date: string) => date >= opFrom && date <= opTo;
+
+  // ── Данные операций с фильтрацией ─────────────────────────────────────
   const branchSales = state.sales.filter(s => s.branchId === state.currentBranchId);
   const branchVisits = state.visits.filter(v => {
     const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
     return entry?.branchId === state.currentBranchId;
   });
 
-  const singleVisitRevenue = branchVisits.filter(v => v.isSingleVisit && v.status === 'attended').reduce((sum, v) => sum + v.price, 0);
-  const subRevenue = branchSales.filter(s => s.type === 'subscription').reduce((sum, s) => sum + s.finalPrice, 0);
-  const totalRevenue = subRevenue + singleVisitRevenue;
+  const filteredSales = branchSales.filter(s => inOpPeriod(s.date));
+  const filteredVisits = branchVisits.filter(v => v.isSingleVisit && v.status === 'attended' && inOpPeriod(v.date));
+
+  const subRevenue = filteredSales.filter(s => s.type === 'subscription' && !s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
+  const singleVisitRevenue = filteredVisits.reduce((sum, v) => sum + v.price, 0);
+  const returnsTotal = filteredSales.filter(s => s.isReturn).reduce((sum, s) => sum + s.finalPrice, 0);
+  const totalRevenue = subRevenue + singleVisitRevenue - returnsTotal;
 
   const byMonth: Record<string, { sub: number; single: number; cash: number; card: number }> = {};
-  branchSales.forEach(s => {
+  filteredSales.forEach(s => {
     const month = s.date.slice(0, 7);
     if (!byMonth[month]) byMonth[month] = { sub: 0, single: 0, cash: 0, card: 0 };
     if (s.type === 'subscription') byMonth[month].sub += s.finalPrice;
@@ -37,11 +91,10 @@ export default function Finance({ store }: FinanceProps) {
     if (s.paymentMethod === 'cash') byMonth[month].cash += s.finalPrice;
     else byMonth[month].card += s.finalPrice;
   });
-
   const months = Object.keys(byMonth).sort().reverse();
 
   const allTransactions = [
-    ...branchSales.map(s => ({
+    ...filteredSales.map(s => ({
       id: s.id,
       date: s.date,
       type: s.isReturn ? 'Возврат' : s.type === 'subscription' ? 'Абонемент' : 'Разовое',
@@ -52,7 +105,7 @@ export default function Finance({ store }: FinanceProps) {
       isIncome: !s.isReturn,
       isReturn: s.isReturn,
     })),
-    ...branchVisits.filter(v => v.isSingleVisit && v.status === 'attended').map(v => {
+    ...filteredVisits.map(v => {
       const entry = state.schedule.find(e => e.id === v.scheduleEntryId);
       const tt = entry ? state.trainingTypes.find(t => t.id === entry.trainingTypeId) : null;
       return {
@@ -70,7 +123,6 @@ export default function Finance({ store }: FinanceProps) {
   ].sort((a, b) => b.date.localeCompare(a.date));
 
   // ── Вкладка расходов ─────────────────────────────────────────────────
-  const now = new Date();
   const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
@@ -79,7 +131,6 @@ export default function Finance({ store }: FinanceProps) {
   const expBranchId = state.currentBranchId;
   const [expCategoryId, setExpCategoryId] = useState('');
 
-  // Редактирование расхода
   const [editingExpense, setEditingExpense] = useState<typeof state.expenses[0] | null>(null);
   const [editForm, setEditForm] = useState({ amount: '', comment: '', date: '', categoryId: '', paymentMethod: 'cash' as 'cash' | 'card' });
   const [showEdit, setShowEdit] = useState(false);
@@ -107,7 +158,6 @@ export default function Finance({ store }: FinanceProps) {
     if (confirm('Удалить расход?')) deleteExpense(id);
   };
 
-  // Фильтрация расходов
   const filteredExpenses = state.expenses.filter(e => {
     const matchBranch = !expBranchId || e.branchId === expBranchId;
     const matchCat = !expCategoryId || e.categoryId === expCategoryId;
@@ -118,7 +168,6 @@ export default function Finance({ store }: FinanceProps) {
 
   const totalFiltered = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
-  // Расходы по категориям (для отчёта)
   const byCategory: Record<string, number> = {};
   filteredExpenses.forEach(e => {
     byCategory[e.categoryId] = (byCategory[e.categoryId] || 0) + e.amount;
@@ -140,25 +189,60 @@ export default function Finance({ store }: FinanceProps) {
 
       {tab === 'operations' && (
         <>
+          {/* Период */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-1 bg-secondary rounded-xl p-1">
+              {OP_PERIODS.map(p => (
+                <button key={p.key} onClick={() => setOpPeriod(p.key)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${opPeriod === p.key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {opPeriod === 'month' && (
+              <div className="flex items-center gap-1 bg-secondary rounded-xl p-1">
+                <button onClick={goPrevMonth} className="px-2 py-1.5 rounded-lg hover:bg-white transition-colors text-muted-foreground hover:text-foreground">
+                  <Icon name="ChevronLeft" size={16} />
+                </button>
+                <span className="px-2 text-sm font-medium capitalize min-w-32 text-center">{monthLabel}</span>
+                <button onClick={goNextMonth} disabled={isCurrentMonth}
+                  className="px-2 py-1.5 rounded-lg hover:bg-white transition-colors text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed">
+                  <Icon name="ChevronRight" size={16} />
+                </button>
+              </div>
+            )}
+
+            {opPeriod === 'custom' && (
+              <div className="flex items-center gap-2">
+                <input type="date" value={opCustomFrom} onChange={e => setOpCustomFrom(e.target.value)}
+                  className="border border-input rounded-lg px-3 py-1.5 text-sm" />
+                <span className="text-muted-foreground text-sm">—</span>
+                <input type="date" value={opCustomTo} onChange={e => setOpCustomTo(e.target.value)}
+                  className="border border-input rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-3 gap-4">
             <div className="stat-card">
-              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Общая выручка</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Выручка</div>
               <div className="text-2xl font-semibold">{totalRevenue.toLocaleString()} ₽</div>
-              <div className="text-xs text-muted-foreground mt-1">за всё время</div>
+              <div className="text-xs text-muted-foreground mt-1 capitalize">{opPeriod === 'month' ? monthLabel : opPeriod === 'all' ? 'За всё время' : 'За период'}</div>
             </div>
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементы</div>
               <div className="text-2xl font-semibold">{subRevenue.toLocaleString()} ₽</div>
-              <div className="text-xs text-muted-foreground mt-1">{branchSales.filter(s => s.type === 'subscription').length} продаж</div>
+              <div className="text-xs text-muted-foreground mt-1">{filteredSales.filter(s => s.type === 'subscription' && !s.isReturn).length} продаж</div>
             </div>
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Разовые визиты</div>
               <div className="text-2xl font-semibold">{singleVisitRevenue.toLocaleString()} ₽</div>
-              <div className="text-xs text-muted-foreground mt-1">{branchVisits.filter(v => v.isSingleVisit).length} посещений</div>
+              <div className="text-xs text-muted-foreground mt-1">{filteredVisits.length} посещений</div>
             </div>
           </div>
 
-          {months.length > 0 && (
+          {months.length > 0 && opPeriod !== 'month' && (
             <div className="bg-white border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wide">По месяцам</div>
               <table className="w-full data-table">
@@ -176,10 +260,10 @@ export default function Finance({ store }: FinanceProps) {
                   {months.map(m => {
                     const d = byMonth[m];
                     const [year, month] = m.split('-');
-                    const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+                    const lbl = new Date(Number(year), Number(month) - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
                     return (
                       <tr key={m}>
-                        <td className="font-medium capitalize">{label}</td>
+                        <td className="font-medium capitalize">{lbl}</td>
                         <td>{d.sub.toLocaleString()} ₽</td>
                         <td className="text-muted-foreground">{d.single.toLocaleString()} ₽</td>
                         <td className="text-muted-foreground">{d.cash.toLocaleString()} ₽</td>
@@ -230,7 +314,7 @@ export default function Finance({ store }: FinanceProps) {
               </tbody>
             </table>
             {allTransactions.length === 0 && (
-              <div className="py-10 text-center text-sm text-muted-foreground">Операций пока нет</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">Операций за выбранный период нет</div>
             )}
           </div>
         </>
@@ -361,27 +445,26 @@ export default function Finance({ store }: FinanceProps) {
           <DialogHeader>
             <DialogTitle>Редактировать расход</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
+          <div className="space-y-4">
+            <div>
+              <Label>Сумма</Label>
+              <Input type="number" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
             <div>
               <Label>Дата</Label>
               <Input type="date" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} />
             </div>
             <div>
               <Label>Категория</Label>
-              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm mt-1"
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm"
                 value={editForm.categoryId} onChange={e => setEditForm(f => ({ ...f, categoryId: e.target.value }))}>
-                <option value="">— выберите —</option>
-                {state.expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">Без категории</option>
+                {branchCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <Label>Сумма, ₽</Label>
-              <Input type="number" min={0} value={editForm.amount}
-                onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
-            </div>
-            <div>
               <Label>Способ оплаты</Label>
-              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm mt-1"
+              <select className="w-full border border-input rounded-lg px-3 py-2 text-sm"
                 value={editForm.paymentMethod} onChange={e => setEditForm(f => ({ ...f, paymentMethod: e.target.value as 'cash' | 'card' }))}>
                 <option value="cash">Наличные</option>
                 <option value="card">Безналичные</option>
@@ -389,11 +472,11 @@ export default function Finance({ store }: FinanceProps) {
             </div>
             <div>
               <Label>Комментарий</Label>
-              <Textarea value={editForm.comment} onChange={e => setEditForm(f => ({ ...f, comment: e.target.value }))} rows={2} />
+              <Textarea value={editForm.comment} onChange={e => setEditForm(f => ({ ...f, comment: e.target.value }))} />
             </div>
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleEditSave} className="flex-1 bg-foreground text-primary-foreground hover:opacity-90">Сохранить</Button>
-              <Button variant="outline" onClick={() => setShowEdit(false)} className="flex-1">Отмена</Button>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowEdit(false)} className="px-4 py-2 text-sm border border-input rounded-lg hover:bg-secondary transition-colors">Отмена</button>
+              <button onClick={handleEditSave} className="px-4 py-2 text-sm bg-foreground text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">Сохранить</button>
             </div>
           </div>
         </DialogContent>
