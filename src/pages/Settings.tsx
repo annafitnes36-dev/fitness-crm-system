@@ -62,10 +62,10 @@ function SalesPlanTab({ state, setSalesPlan }: SalesPlanTabProps) {
     return `${selectedYear}-${String(m).padStart(2, '0')}`;
   });
 
-  const subPlans = state.subscriptionPlans.filter(p => p.branchId === selectedBranchId);
-  const addPlans = state.singleVisitPlans.filter(p => p.branchId === selectedBranchId);
-  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) — показываем только для выбранного филиала
-  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0 && tt.branchIds?.includes(selectedBranchId));
+  const subPlans = state.subscriptionPlans;
+  const addPlans = state.singleVisitPlans;
+  // Типы тренировок с доплатой (мини-группы, фан-группы и т.п.) — показываем все, у которых есть доплата
+  const extraItems = state.trainingTypes.filter(tt => tt.extraPrice && tt.extraPrice > 0);
   const allItems = [
     ...subPlans.map(p => ({ ...p, kind: 'sub' as const })),
     ...addPlans.map(p => ({ ...p, kind: 'add' as const })),
@@ -820,7 +820,6 @@ export default function Settings({ store }: SettingsProps) {
 
   const [showAddPlan, setShowAddPlan] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
-  const [planBranchId, setPlanBranchId] = useState(state.currentBranchId);
   const [planForm, setPlanForm] = useState({
     name: '', price: 0, durationDays: 30, sessionsLimit: 8 as number | 'unlimited',
     trainingTypeIds: [] as string[], allDirections: false, freezeDays: 7,
@@ -829,7 +828,6 @@ export default function Settings({ store }: SettingsProps) {
 
   const [showAddSingle, setShowAddSingle] = useState(false);
   const [editingSingle, setEditingSingle] = useState<SingleVisitPlan | null>(null);
-  const [singleBranchId, setSingleBranchId] = useState(state.currentBranchId);
   const [singleForm, setSingleForm] = useState({ name: '', price: 0, trainingTypeIds: [] as string[], autoActivateDays: '' as string | number, noExtraCharge: false });
 
   const [newChannel, setNewChannel] = useState('');
@@ -919,30 +917,30 @@ export default function Settings({ store }: SettingsProps) {
     setShowAddHall(false);
   };
 
-  const openAddPlan = () => { setEditingPlan(null); setPlanBranchId(planBranchId || state.currentBranchId); setPlanForm({ name: '', price: 0, durationDays: 30, sessionsLimit: 8, trainingTypeIds: [], allDirections: false, freezeDays: 7, autoActivateDays: '' }); setShowAddPlan(true); };
-  const openEditPlan = (p: SubscriptionPlan) => { setEditingPlan(p); setPlanBranchId(p.branchId || state.currentBranchId); setPlanForm({ name: p.name, price: p.price, durationDays: p.durationDays, sessionsLimit: p.sessionsLimit, trainingTypeIds: p.trainingTypeIds, allDirections: p.allDirections, freezeDays: p.freezeDays, autoActivateDays: p.autoActivateDays ?? '' }); setShowAddPlan(true); };
+  const openAddPlan = () => { setEditingPlan(null); setPlanForm({ name: '', price: 0, durationDays: 30, sessionsLimit: 8, trainingTypeIds: [], allDirections: false, freezeDays: 7, autoActivateDays: '' }); setShowAddPlan(true); };
+  const openEditPlan = (p: SubscriptionPlan) => { setEditingPlan(p); setPlanForm({ name: p.name, price: p.price, durationDays: p.durationDays, sessionsLimit: p.sessionsLimit, trainingTypeIds: p.trainingTypeIds, allDirections: p.allDirections, freezeDays: p.freezeDays, autoActivateDays: p.autoActivateDays ?? '' }); setShowAddPlan(true); };
   const handleSavePlan = () => {
     if (!planForm.name || planForm.price <= 0) return;
     const autoActivateDays = planForm.autoActivateDays !== '' && planForm.autoActivateDays !== null ? Number(planForm.autoActivateDays) : null;
     const baseData = { name: planForm.name, price: planForm.price, durationDays: planForm.durationDays, sessionsLimit: planForm.sessionsLimit, trainingTypeIds: planForm.allDirections ? [] : planForm.trainingTypeIds, allDirections: planForm.allDirections, freezeDays: planForm.freezeDays, autoActivateDays };
     if (editingPlan) {
-      updateSubscriptionPlan(editingPlan.id, { ...baseData, branchId: editingPlan.branchId });
+      updateSubscriptionPlan(editingPlan.id, baseData);
     } else {
-      addSubscriptionPlan({ ...baseData, branchId: planBranchId });
+      addSubscriptionPlan(baseData);
     }
     setShowAddPlan(false);
   };
 
-  const openAddSingle = () => { setEditingSingle(null); setSingleBranchId(singleBranchId || state.currentBranchId); setSingleForm({ name: '', price: 0, trainingTypeIds: [], autoActivateDays: '', noExtraCharge: false }); setShowAddSingle(true); };
-  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleBranchId(p.branchId || state.currentBranchId); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds, autoActivateDays: p.autoActivateDays ?? '', noExtraCharge: p.noExtraCharge ?? false }); setShowAddSingle(true); };
+  const openAddSingle = () => { setEditingSingle(null); setSingleForm({ name: '', price: 0, trainingTypeIds: [], autoActivateDays: '', noExtraCharge: false }); setShowAddSingle(true); };
+  const openEditSingle = (p: SingleVisitPlan) => { setEditingSingle(p); setSingleForm({ name: p.name, price: p.price, trainingTypeIds: p.trainingTypeIds, autoActivateDays: p.autoActivateDays ?? '', noExtraCharge: p.noExtraCharge ?? false }); setShowAddSingle(true); };
   const handleSaveSingle = () => {
     if (!singleForm.name || singleForm.price <= 0) return;
     const autoActivateDays = singleForm.autoActivateDays !== '' && singleForm.autoActivateDays !== null ? Number(singleForm.autoActivateDays) : null;
     const baseData = { name: singleForm.name, price: singleForm.price, trainingTypeIds: singleForm.trainingTypeIds, autoActivateDays, noExtraCharge: singleForm.noExtraCharge };
     if (editingSingle) {
-      updateSingleVisitPlan(editingSingle.id, { ...baseData, branchId: editingSingle.branchId });
+      updateSingleVisitPlan(editingSingle.id, baseData);
     } else {
-      addSingleVisitPlan({ ...baseData, branchId: singleBranchId });
+      addSingleVisitPlan({ ...baseData, branchId: state.currentBranchId });
     }
     setShowAddSingle(false);
   };
@@ -1095,19 +1093,13 @@ export default function Settings({ store }: SettingsProps) {
 
       {tab === 'plans' && (
         <div className="space-y-4 animate-fade-in">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Филиал</label>
-              <select className="border border-input rounded-lg px-3 py-2 text-sm" value={planBranchId} onChange={e => setPlanBranchId(e.target.value)}>
-                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
+          <div className="flex justify-end">
             <Button onClick={openAddPlan} className="bg-foreground text-primary-foreground hover:opacity-90">
               <Icon name="Plus" size={14} className="mr-1.5" /> Добавить абонемент
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {state.subscriptionPlans.filter(p => p.branchId === planBranchId).map(p => (
+            {state.subscriptionPlans.map(p => (
               <div key={p.id} className="bg-white border border-border rounded-xl p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -1142,19 +1134,13 @@ export default function Settings({ store }: SettingsProps) {
 
       {tab === 'single' && (
         <div className="space-y-4 animate-fade-in">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Филиал</label>
-              <select className="border border-input rounded-lg px-3 py-2 text-sm" value={singleBranchId} onChange={e => setSingleBranchId(e.target.value)}>
-                {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
+          <div className="flex justify-end">
             <Button onClick={openAddSingle} className="bg-foreground text-primary-foreground hover:opacity-90">
               <Icon name="Plus" size={14} className="mr-1.5" /> Добавить разовое
             </Button>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            {state.singleVisitPlans.filter(p => p.branchId === singleBranchId).map(p => (
+            {state.singleVisitPlans.map(p => (
               <div key={p.id} className="bg-white border border-border rounded-xl p-4">
                 <div className="flex items-start justify-between">
                   <div>
@@ -1506,14 +1492,6 @@ export default function Settings({ store }: SettingsProps) {
           <DialogHeader><DialogTitle>{editingPlan ? 'Редактировать абонемент' : 'Новый абонемент'}</DialogTitle></DialogHeader>
 
           <div className="space-y-4">
-            {!editingPlan && (
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Филиал *</Label>
-                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={planBranchId} onChange={e => setPlanBranchId(e.target.value)}>
-                  {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-            )}
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs text-muted-foreground mb-1 block">Цена ₽ *</Label><Input type="number" value={planForm.price} onChange={e => setPlanForm(f => ({ ...f, price: Number(e.target.value) }))} /></div>
@@ -1573,14 +1551,6 @@ export default function Settings({ store }: SettingsProps) {
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingSingle ? 'Редактировать разовое' : 'Новое разовое посещение'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            {!editingSingle && (
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">Филиал *</Label>
-                <select className="w-full border border-input rounded-lg px-3 py-2 text-sm" value={singleBranchId} onChange={e => setSingleBranchId(e.target.value)}>
-                  {state.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-            )}
             <div><Label className="text-xs text-muted-foreground mb-1 block">Название *</Label><Input value={singleForm.name} onChange={e => setSingleForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label className="text-xs text-muted-foreground mb-1 block">Цена ₽ *</Label><Input type="number" value={singleForm.price} onChange={e => setSingleForm(f => ({ ...f, price: Number(e.target.value) }))} /></div>
             <div>
