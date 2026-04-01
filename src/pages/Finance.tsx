@@ -42,7 +42,7 @@ function getOpDates(period: OpPeriodKey, browseYear: number, browseMonthIdx: num
 }
 
 export default function Finance({ store }: FinanceProps) {
-  const { state, addExpense, updateExpense, deleteExpense } = store;
+  const { state, addExpense, updateExpense, deleteExpense, deleteSale, deleteVisit } = store;
   const [tab, setTab] = useState<FinanceTab>('operations');
 
   // ── Период для операций ───────────────────────────────────────────────
@@ -82,6 +82,16 @@ export default function Finance({ store }: FinanceProps) {
   const singleVisitRevenue = filteredVisits.reduce((sum, v) => sum + v.price, 0);
   const returnsTotal = filteredSales.filter(s => s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0);
   const totalRevenue = subRevenue + singleVisitRevenue - returnsTotal;
+
+  // Расходы за тот же период для расчёта прибыли
+  const periodExpenses = state.expenses.filter(e =>
+    e.branchId === state.currentBranchId && inOpPeriod(e.date)
+  ).reduce((sum, e) => sum + e.amount, 0);
+  const profit = totalRevenue - periodExpenses;
+
+  // Права на удаление операций
+  const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
+  const canDeleteOperations = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
 
   const byMonth: Record<string, { sub: number; single: number; cash: number; card: number }> = {};
   filteredSales.forEach(s => {
@@ -225,16 +235,23 @@ export default function Finance({ store }: FinanceProps) {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Выручка</div>
               <div className="text-2xl font-semibold">{totalRevenue.toLocaleString()} ₽</div>
               <div className="text-xs text-muted-foreground mt-1 capitalize">{opPeriod === 'month' ? monthLabel : opPeriod === 'all' ? 'За всё время' : 'За период'}</div>
             </div>
             <div className="stat-card">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Прибыль</div>
+              <div className={`text-2xl font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{profit >= 0 ? '' : '−'}{Math.abs(profit).toLocaleString()} ₽</div>
+              <div className="text-xs text-muted-foreground mt-1">Выручка − расходы ({periodExpenses.toLocaleString()} ₽)</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементы</div>
               <div className="text-2xl font-semibold">{subRevenue.toLocaleString()} ₽</div>
-              <div className="text-xs text-muted-foreground mt-1">{filteredSales.filter(s => s.type === 'subscription' && !s.isReturn).length} продаж</div>
+              <div className="text-xs text-muted-foreground mt-1">{filteredSales.filter(s => s.type === 'subscription' && !s.isRefund).length} продаж</div>
             </div>
             <div className="stat-card">
               <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Разовые визиты</div>
@@ -291,6 +308,7 @@ export default function Finance({ store }: FinanceProps) {
                   <th>Тип</th>
                   <th>Оплата</th>
                   <th>Сумма</th>
+                  {canDeleteOperations && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -310,6 +328,24 @@ export default function Finance({ store }: FinanceProps) {
                     <td className={`font-semibold ${t.isReturn ? 'text-red-600' : 'text-green-600'}`}>
                       {t.isReturn ? '' : '+'}{Math.abs(t.amount).toLocaleString()} ₽
                     </td>
+                    {canDeleteOperations && (
+                      <td>
+                        <button
+                          onClick={() => {
+                            if (!confirm('Удалить операцию? Это действие нельзя отменить.')) return;
+                            if (t.type === 'Разовый визит') {
+                              deleteVisit(t.id);
+                            } else {
+                              deleteSale(t.id);
+                            }
+                          }}
+                          className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
+                          title="Удалить операцию"
+                        >
+                          <Icon name="Trash2" size={14} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

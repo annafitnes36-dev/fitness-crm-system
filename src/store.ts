@@ -3160,10 +3160,93 @@ export function useStore() {
   };
 
   const deleteSale = (id: string) => {
-    update(s => ({
-      ...s,
-      sales: s.sales.filter(sale => sale.id !== id),
-    }));
+    update(s => {
+      const sale = s.sales.find(sale => sale.id === id);
+      if (!sale) return s;
+
+      let newSubscriptions = s.subscriptions;
+      let newClients = s.clients;
+      let newVisits = s.visits;
+
+      if (sale.type === 'subscription') {
+        // Найти абонемент, созданный вместе с этой продажей:
+        // ищем Subscription этого клиента с тем же planId и датой покупки
+        const linkedSub = s.subscriptions.find(
+          sub => sub.clientId === sale.clientId &&
+                 sub.planId === sale.itemId &&
+                 sub.purchaseDate === sale.date
+        );
+        if (linkedSub) {
+          newSubscriptions = s.subscriptions.filter(sub => sub.id !== linkedSub.id);
+          // Сбрасываем activeSubscriptionId у клиента, если он указывает на этот абонемент
+          newClients = s.clients.map(c => {
+            if (c.id === sale.clientId && c.activeSubscriptionId === linkedSub.id) {
+              // Ищем следующий активный абонемент у клиента
+              const remaining = newSubscriptions.filter(
+                sub => sub.clientId === c.id && (sub.status === 'active' || sub.status === 'pending' || sub.status === 'frozen')
+              ).sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+              return { ...c, activeSubscriptionId: remaining[0]?.id ?? null };
+            }
+            return c;
+          });
+          // Сбрасываем визиты, которые списывали этот абонемент
+          newVisits = s.visits.map(v =>
+            v.subscriptionId === linkedSub.id
+              ? { ...v, subscriptionId: null, status: 'enrolled' as const, isSingleVisit: false, price: 0 }
+              : v
+          );
+        }
+      }
+
+      if (sale.type === 'single' || sale.type === 'extra') {
+        // Для разовых/доп. продаж также откатываем связанный визит
+        newVisits = s.visits.map(v =>
+          v.isSingleVisit && v.clientId === sale.clientId && v.date === sale.date
+            ? { ...v, status: 'enrolled' as const, isSingleVisit: false, price: 0, singlePlanId: null }
+            : v
+        );
+      }
+
+      return {
+        ...s,
+        sales: s.sales.filter(sale => sale.id !== id),
+        subscriptions: newSubscriptions,
+        clients: newClients,
+        visits: newVisits,
+      };
+    });
+  };
+
+  const deleteVisit = (id: string) => {
+    update(s => {
+      const visit = s.visits.find(v => v.id === id);
+      if (!visit) return s;
+
+      let newSubs = s.subscriptions;
+      let newSchedule = s.schedule;
+
+      // Если визит был отмечен и списан с абонемента — вернуть занятие
+      if (visit.status === 'attended' && visit.subscriptionId) {
+        newSubs = s.subscriptions.map(sub => {
+          if (sub.id !== visit.subscriptionId || sub.sessionsLeft === 'unlimited') return sub;
+          return { ...sub, sessionsLeft: (sub.sessionsLeft as number) + 1 };
+        });
+      }
+
+      // Убираем клиента из записанных в тренировку
+      newSchedule = s.schedule.map(entry =>
+        entry.id === visit.scheduleEntryId
+          ? { ...entry, enrolledClientIds: entry.enrolledClientIds.filter(cid => cid !== visit.clientId) }
+          : entry
+      );
+
+      return {
+        ...s,
+        visits: s.visits.filter(v => v.id !== id),
+        subscriptions: newSubs,
+        schedule: newSchedule,
+      };
+    });
   };
 
   const hideDashboardItem = (id: string) => {
@@ -3469,7 +3552,7 @@ export function useStore() {
     addSubscriptionPlan, updateSubscriptionPlan, removeSubscriptionPlan,
     addSingleVisitPlan, updateSingleVisitPlan, removeSingleVisitPlan,
     addStaff, updateStaff, removeStaff, setCurrentStaff, generateInviteToken,
-    addInquiry, deleteInquiry, deleteSale, hideDashboardItem, restoreDashboardItem,
+    addInquiry, deleteInquiry, deleteSale, deleteVisit, hideDashboardItem, restoreDashboardItem,
     addContactChannel, updateContactChannel, removeContactChannel,
     addAdSource, updateAdSource, removeAdSource,
     addExpense, updateExpense, deleteExpense, addExpenseCategory, updateExpenseCategory, removeExpenseCategory,
