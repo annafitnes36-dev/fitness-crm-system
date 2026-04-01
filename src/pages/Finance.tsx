@@ -23,7 +23,8 @@ const OP_PERIODS: { key: OpPeriodKey; label: string }[] = [
 
 function getOpDates(period: OpPeriodKey, browseYear: number, browseMonthIdx: number, customFrom: string, customTo: string) {
   const now = new Date();
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const today = fmt(now);
   if (period === 'month') {
     return {

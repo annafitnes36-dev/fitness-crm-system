@@ -12,7 +12,7 @@ interface DashboardProps {
 type PeriodKey = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 function getPeriodDates(period: PeriodKey, customFrom: string, customTo: string, browseYear: number, browseMonthIdx: number) {
   const now = new Date();
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const today = fmt(now);
   if (period === 'today') return { from: today, to: today };
   if (period === 'week') { const m = new Date(now); m.setDate(now.getDate() - now.getDay() + 1); return { from: fmt(m), to: today }; }
