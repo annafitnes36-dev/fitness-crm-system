@@ -212,7 +212,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   const clientName = (c: Client) => [c.lastName, c.firstName].filter(Boolean).join(' ') || c.phone || '—';
 
   const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
-  const canDelete = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+  const canDelete = true;
   const canDeleteInquiriesOnly = currentStaff?.role === 'admin';
 
   type DetailRow = { name: string; sub: string; id: string; deleteType: 'inquiry' | 'sale' | 'client' | 'hide' | null };

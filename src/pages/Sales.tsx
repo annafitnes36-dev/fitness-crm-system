@@ -13,13 +13,6 @@ const MONTH_NAMES = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ];
 
-function getLocalDateStr(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 type CardKey = 'revenue' | 'subs' | 'cash' | 'card';
 
 interface CardModal {
@@ -28,7 +21,7 @@ interface CardModal {
 }
 
 export default function Sales({ store, onSell }: SalesProps) {
-  const { state, getClientFullName } = store;
+  const { state, hideDashboardItem, restoreDashboardItem } = store;
   const now = new Date();
 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -37,6 +30,7 @@ export default function Sales({ store, onSell }: SalesProps) {
   const [openCard, setOpenCard] = useState<CardModal | null>(null);
 
   const branches = state.branches || [];
+  const hiddenIds = new Set(state.dashboardHiddenIds || []);
 
   const branchSales = state.sales.filter(s => {
     if (selectedBranchId === 'all') return true;
@@ -64,7 +58,10 @@ export default function Sales({ store, onSell }: SalesProps) {
     .sort((a, b) => b.year - a.year || b.month - a.month);
 
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
-  const monthSales = branchSales.filter(s => s.date && s.date.startsWith(monthPrefix));
+  // Все продажи месяца (включая скрытые) — для таблицы истории
+  const monthSalesAll = branchSales.filter(s => s.date && s.date.startsWith(monthPrefix));
+  // Видимые продажи — для счётчиков карточек
+  const monthSales = monthSalesAll.filter(s => !hiddenIds.has(s.id));
 
   const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
@@ -99,22 +96,20 @@ export default function Sales({ store, onSell }: SalesProps) {
   const canGoPrev = currentIdx < monthList.length - 1;
   const canGoNext = currentIdx > 0;
 
+  // Модал показывает ВСЕ операции (включая скрытые, чтобы можно было восстановить)
   const getCardSales = (key: CardKey) => {
     switch (key) {
-      case 'revenue':
-        return monthSales.slice().reverse();
-      case 'subs':
-        return subSales.slice().reverse();
-      case 'cash':
-        return monthSales.filter(s => s.paymentMethod === 'cash').slice().reverse();
-      case 'card':
-        return monthSales.filter(s => s.paymentMethod === 'card').slice().reverse();
+      case 'revenue': return monthSalesAll.slice().reverse();
+      case 'subs':    return monthSalesAll.filter(s => s.type === 'subscription' && !s.isRefund).slice().reverse();
+      case 'cash':    return monthSalesAll.filter(s => s.paymentMethod === 'cash').slice().reverse();
+      case 'card':    return monthSalesAll.filter(s => s.paymentMethod === 'card').slice().reverse();
     }
   };
 
   const modalSales = openCard ? getCardSales(openCard.key) : [];
+  const modalHiddenCount = modalSales.filter(s => hiddenIds.has(s.id)).length;
 
-  const fmtSaleTag = (sale: typeof monthSales[0]) => {
+  const fmtSaleTag = (sale: typeof monthSalesAll[0]) => {
     if (sale.isRefund) return <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Возврат</span>;
     if (sale.isFirstSubscription) return <span className="text-xs badge-new px-2 py-0.5 rounded-full">Первый</span>;
     if (sale.isRenewal) return <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>;
@@ -224,8 +219,8 @@ export default function Sales({ store, onSell }: SalesProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             История продаж
-            {monthSales.length > 0 && (
-              <span className="ml-2 normal-case font-normal">— {monthSales.length} шт.</span>
+            {monthSalesAll.length > 0 && (
+              <span className="ml-2 normal-case font-normal">— {monthSalesAll.length} шт.</span>
             )}
             {selectedBranchId !== 'all' && (
               <span className="ml-2 normal-case font-normal text-foreground">
@@ -253,11 +248,12 @@ export default function Sales({ store, onSell }: SalesProps) {
             </tr>
           </thead>
           <tbody>
-            {monthSales.slice().reverse().map(sale => {
+            {monthSalesAll.slice().reverse().map(sale => {
               const client = state.clients.find(c => c.id === sale.clientId);
               const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
+              const isHidden = hiddenIds.has(sale.id);
               return (
-                <tr key={sale.id}>
+                <tr key={sale.id} className={isHidden ? 'opacity-40' : ''}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
                   <td className="text-sm text-muted-foreground">{sale.itemName}</td>
                   <td>
@@ -287,7 +283,7 @@ export default function Sales({ store, onSell }: SalesProps) {
             })}
           </tbody>
         </table>
-        {monthSales.length === 0 && (
+        {monthSalesAll.length === 0 && (
           <div className="py-10 text-center text-sm text-muted-foreground">
             Продаж в {MONTH_NAMES[selectedMonth].toLowerCase()} {selectedYear} нет
           </div>
@@ -300,6 +296,13 @@ export default function Sales({ store, onSell }: SalesProps) {
           <DialogHeader>
             <DialogTitle>{openCard?.title}</DialogTitle>
           </DialogHeader>
+
+          {modalHiddenCount > 0 && (
+            <p className="text-xs text-muted-foreground -mt-1">
+              Скрытых операций: {modalHiddenCount} — они не учитываются в счётчике карточки
+            </p>
+          )}
+
           <div className="overflow-y-auto flex-1 -mx-6 px-6">
             {modalSales.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">Нет операций</div>
@@ -309,8 +312,9 @@ export default function Sales({ store, onSell }: SalesProps) {
                   const client = state.clients.find(c => c.id === sale.clientId);
                   const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
                   const clientName = client ? `${client.lastName} ${client.firstName}`.trim() : '—';
+                  const isHidden = hiddenIds.has(sale.id);
                   return (
-                    <div key={sale.id} className="py-3 flex items-center gap-3">
+                    <div key={sale.id} className={`py-3 flex items-center gap-3 ${isHidden ? 'opacity-40' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{clientName}</span>
@@ -322,7 +326,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                           <span> · {sale.date}</span>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 mr-1">
                         <div className={`font-semibold text-sm ${sale.isRefund ? 'text-red-600' : ''}`}>
                           {sale.isRefund ? '−' : ''}{Math.abs(sale.finalPrice).toLocaleString()} ₽
                         </div>
@@ -330,6 +334,13 @@ export default function Sales({ store, onSell }: SalesProps) {
                           {sale.paymentMethod === 'card' ? 'Безнал' : sale.paymentMethod === 'bonus' ? 'Бонусы' : 'Нал'}
                         </div>
                       </div>
+                      <button
+                        onClick={() => isHidden ? restoreDashboardItem(sale.id) : hideDashboardItem(sale.id)}
+                        className={`shrink-0 p-1.5 rounded-lg transition-colors ${isHidden ? 'text-amber-500 hover:text-emerald-600 hover:bg-emerald-50' : 'text-muted-foreground hover:text-red-500 hover:bg-red-50'}`}
+                        title={isHidden ? 'Включить в статистику' : 'Скрыть из статистики'}
+                      >
+                        <Icon name={isHidden ? 'Eye' : 'EyeOff'} size={14} />
+                      </button>
                     </div>
                   );
                 })}
@@ -338,9 +349,9 @@ export default function Sales({ store, onSell }: SalesProps) {
           </div>
           {openCard && (
             <div className="pt-3 border-t border-border text-sm text-muted-foreground flex justify-between">
-              <span>{modalSales.length} операций</span>
+              <span>{modalSales.filter(s => !hiddenIds.has(s.id)).length} активных · {modalHiddenCount} скрыто</span>
               <span className="font-medium text-foreground">
-                {modalSales.reduce((s, x) => s + (x.isRefund ? -Math.abs(x.finalPrice) : x.finalPrice), 0).toLocaleString()} ₽
+                {modalSales.filter(s => !hiddenIds.has(s.id)).reduce((s, x) => s + (x.isRefund ? -Math.abs(x.finalPrice) : x.finalPrice), 0).toLocaleString()} ₽
               </span>
             </div>
           )}
