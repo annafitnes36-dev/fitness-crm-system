@@ -614,6 +614,14 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
           <DialogHeader>
             <DialogTitle>{activeDetail?.title}</DialogTitle>
           </DialogHeader>
+          {(() => {
+            const hiddenCount = activeDetail?.rows.filter(r => hiddenIds.has(r.id) && r.deleteType !== 'inquiry').length ?? 0;
+            return hiddenCount > 0 ? (
+              <p className="text-xs text-muted-foreground -mt-1">
+                Скрытых: {hiddenCount} — не учитываются в счётчике карточки
+              </p>
+            ) : null;
+          })()}
           <div className="overflow-y-auto flex-1 -mx-6 px-6">
             {activeDetail?.rows.length === 0 && (
               <div className="py-10 text-center text-sm text-muted-foreground">Нет данных за выбранный период</div>
@@ -622,25 +630,25 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
               {activeDetail?.rows.map((row, i) => {
                 const isHidden = hiddenIds.has(row.id) && row.deleteType !== 'inquiry';
                 return (
-                <div key={i} className={`py-2.5 flex items-start justify-between gap-2 ${isHidden ? 'opacity-50' : ''}`}>
-                  <div className="min-w-0">
+                <div key={i} className={`py-2.5 flex items-center justify-between gap-2 ${isHidden ? 'opacity-40' : ''}`}>
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{row.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{row.sub}</div>
                   </div>
                   {(canDelete && row.deleteType || canDeleteInquiriesOnly && row.deleteType === 'inquiry') && (
-                    hiddenIds.has(row.id) && row.deleteType !== 'inquiry' ? (
+                    isHidden ? (
                       <button
                         onClick={() => handleRestoreRow(row.id)}
-                        className="shrink-0 text-amber-500 hover:text-emerald-600 transition-colors p-1 rounded"
-                        title="Вернуть в статистику дашборда"
+                        className="shrink-0 text-amber-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors p-1.5 rounded-lg"
+                        title="Включить в статистику"
                       >
                         <Icon name="Eye" size={14} />
                       </button>
                     ) : (
                       <button
                         onClick={() => handleHideRow(row)}
-                        className="shrink-0 text-muted-foreground hover:text-red-500 transition-colors p-1 rounded"
-                        title={row.deleteType === 'inquiry' ? 'Удалить обращение' : 'Исключить из статистики дашборда'}
+                        className="shrink-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors p-1.5 rounded-lg"
+                        title={row.deleteType === 'inquiry' ? 'Удалить обращение' : 'Скрыть из статистики'}
                       >
                         <Icon name={row.deleteType === 'inquiry' ? 'Trash2' : 'EyeOff'} size={14} />
                       </button>
@@ -652,8 +660,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
             </div>
           </div>
           <div className="pt-2 border-t border-border text-xs text-muted-foreground flex items-center justify-between gap-2">
-            <span>Всего: {activeDetail?.rows.length ?? 0}</span>
-            {canDelete && <span className="text-muted-foreground/60">Скрытые позиции исключаются из счётчика, но сохраняются в системе</span>}
+            <span>{activeDetail?.rows.filter(r => !hiddenIds.has(r.id) || r.deleteType === 'inquiry').length ?? 0} активных · {activeDetail?.rows.filter(r => hiddenIds.has(r.id) && r.deleteType !== 'inquiry').length ?? 0} скрыто</span>
+            <span className="text-muted-foreground/60">Скрытые не учитываются в счётчике</span>
           </div>
         </DialogContent>
       </Dialog>

@@ -27,7 +27,7 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const NO_HALL_ID = '__no_hall__';
 
 export default function Schedule({ store, onSell }: ScheduleProps) {
-  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch, sellExtra, unfreezeSubscription } = store;
+  const { state, addScheduleEntry, updateScheduleEntry, removeScheduleEntry, enrollClient, markVisit, resetVisit, copyWeekSchedule, addClientToBranch, sellExtra, unfreezeSubscription, deleteVisit } = store;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHallId, setSelectedHallId] = useState<string>(NO_HALL_ID);
@@ -837,6 +837,13 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                           >
                             Отменил
                           </button>
+                          <button
+                            onClick={() => { if (visit?.id) deleteVisit(visit.id); }}
+                            className="text-xs px-2 py-1 rounded bg-secondary text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors font-medium"
+                            title="Удалить запись клиента"
+                          >
+                            Удалить
+                          </button>
                         </div>
                       )}
                       {currentStatus === 'attended' && (
@@ -856,6 +863,13 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
                             className="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors font-medium"
                           >
                             Пришёл
+                          </button>
+                          <button
+                            onClick={() => { if (visit?.id) deleteVisit(visit.id); }}
+                            className="text-xs px-2 py-1 rounded bg-secondary text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors font-medium"
+                            title="Удалить запись клиента"
+                          >
+                            Удалить
                           </button>
                         </div>
                       )}
