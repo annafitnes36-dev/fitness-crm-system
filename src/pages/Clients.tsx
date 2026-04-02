@@ -16,6 +16,7 @@ interface ClientsProps {
 const categories: { id: ClientCategory | 'all'; label: string }[] = [
   { id: 'all', label: 'Все' },
   { id: 'new', label: 'Новички' },
+  { id: 'potential', label: 'Потенциальные' },
   { id: 'loyal', label: 'Лояльные' },
   { id: 'sleeping', label: 'Уснувшие' },
   { id: 'lost', label: 'Потерянные' },

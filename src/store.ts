@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 
-export type ClientCategory = 'new' | 'loyal' | 'sleeping' | 'lost';
+export type ClientCategory = 'new' | 'loyal' | 'sleeping' | 'lost' | 'potential';
 
 export interface Branch {
   id: string;
@@ -3522,8 +3522,14 @@ export function useStore() {
     }
     const hasSub = !!client.activeSubscriptionId;
     const allSubs = state.sales.filter(s => s.clientId === client.id && s.type === 'subscription');
-    if (allSubs.length === 0) return 'new';
     if (hasSub) return 'loyal';
+    if (allSubs.length === 0) {
+      // Потенциальный: был ровно 1 раз, отмечен "пришёл", оплатил разовое, нет абонемента
+      const attendedVisits = state.visits.filter(v => v.clientId === client.id && v.status === 'attended');
+      const hasSingleSale = state.sales.some(s => s.clientId === client.id && s.type === 'single');
+      if (attendedVisits.length === 1 && hasSingleSale) return 'potential';
+      return 'new';
+    }
     const lastSale = allSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
     const daysSince = (Date.now() - new Date(lastSale.date).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince <= 90) return 'sleeping';

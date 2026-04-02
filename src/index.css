@@ -153,6 +153,9 @@
   .badge-lost {
     @apply bg-red-50 text-red-700 border border-red-200;
   }
+  .badge-potential {
+    @apply bg-purple-50 text-purple-700 border border-purple-200;
+  }
   .badge-other {
     @apply bg-secondary text-muted-foreground border border-border;
   }

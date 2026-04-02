@@ -115,8 +115,8 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
     return Math.round(subPrice / monthlyVisits);
   })();
 
-  const catLabel = { new: 'Новичок', loyal: 'Лояльный', sleeping: 'Уснувший', lost: 'Потерянный' }[cat];
-  const badgeClass = { new: 'badge-new', loyal: 'badge-loyal', sleeping: 'badge-sleeping', lost: 'badge-lost' }[cat];
+  const catLabel = { new: 'Новичок', loyal: 'Лояльный', sleeping: 'Уснувший', lost: 'Потерянный', potential: 'Потенциальный' }[cat];
+  const badgeClass = { new: 'badge-new', loyal: 'badge-loyal', sleeping: 'badge-sleeping', lost: 'badge-lost', potential: 'badge-potential' }[cat];
 
   const todaySchedule = state.schedule.filter(e => e.branchId === state.currentBranchId && e.date >= new Date().toISOString().split('T')[0]);
 
@@ -176,6 +176,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
                   <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
                     {([
                       { value: 'new', label: 'Новичок', cls: 'badge-new' },
+                      { value: 'potential', label: 'Потенциальный', cls: 'badge-potential' },
                       { value: 'loyal', label: 'Лояльный', cls: 'badge-loyal' },
                       { value: 'sleeping', label: 'Уснувший', cls: 'badge-sleeping' },
                       { value: 'lost', label: 'Потерянный', cls: 'badge-lost' },
