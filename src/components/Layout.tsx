@@ -17,6 +17,7 @@ interface LayoutProps {
 const ALL_NAV_ITEMS = [
   { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp', permKey: 'menuAnalytics' as keyof Permission },
   { id: 'reports', label: 'Отчёты', icon: 'FileBarChart2', permKey: 'menuReports' as keyof Permission },
+  { id: 'marketing', label: 'Маркетинг', icon: 'Megaphone', permKey: 'menuMarketing' as keyof Permission },
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard', permKey: 'menuDashboard' as keyof Permission },
   { id: 'clients', label: 'Клиенты', icon: 'Users', permKey: 'menuClients' as keyof Permission },
   { id: 'schedule', label: 'Расписание', icon: 'Calendar', permKey: 'menuSchedule' as keyof Permission },

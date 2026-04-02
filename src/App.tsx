@@ -18,6 +18,7 @@ import Reports from '@/pages/Reports';
 import Notifications from '@/pages/Notifications';
 import Cash from '@/pages/Cash';
 import Login from '@/pages/Login';
+import Marketing from '@/pages/Marketing';
 
 export default function App() {
   const store = useStore();
@@ -125,6 +126,7 @@ export default function App() {
     switch (activePage) {
       case 'director-dashboard': return <DirectorDashboard store={store} />;
       case 'reports': return <Reports store={store} />;
+      case 'marketing': return <Marketing store={store} />;
       case 'dashboard': return <Dashboard store={store} onSell={handleSell} onNavigate={setActivePage} />;
       case 'clients': return <Clients store={store} onSell={handleSell} />;
       case 'schedule': return <Schedule store={store} onSell={handleSell} />;

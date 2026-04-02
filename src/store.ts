@@ -292,6 +292,7 @@ export interface Permission {
   // Пункты меню
   menuAnalytics: boolean;              // Аналитика
   menuReports: boolean;                // Отчёты
+  menuMarketing: boolean;              // Маркетинг
   menuDashboard: boolean;              // Дашборд
   menuClients: boolean;                // Клиенты
   menuSchedule: boolean;               // Расписание
@@ -326,7 +327,7 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
   marketer: 'Маркетолог',
 };
 
-const ALL_MENU = { menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: true, menuCash: true, menuBranches: true, menuStaff: true, menuSettings: true };
+const ALL_MENU = { menuAnalytics: true, menuReports: true, menuMarketing: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: true, menuCash: true, menuBranches: true, menuStaff: true, menuSettings: true };
 
 export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
   director: {
@@ -351,7 +352,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: true, viewSchedule: true, enrollClients: true, sellSubscriptions: true,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: false, menuReports: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuCash: true, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: false, menuReports: false, menuMarketing: false, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: true, menuSales: true, menuFinance: false, menuCash: true, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   trainer: {
     viewDirectorDashboard: false, viewAdminDashboard: false, viewFinanceHistory: false,
@@ -359,7 +360,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: false, menuReports: false, menuDashboard: false, menuClients: false, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: false, menuReports: false, menuMarketing: false, menuDashboard: false, menuClients: false, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
   marketer: {
     viewDirectorDashboard: true, viewAdminDashboard: true, viewFinanceHistory: false,
@@ -367,7 +368,7 @@ export const DEFAULT_PERMISSIONS: Record<StaffRole, Permission> = {
     viewPhoneNumbers: false, viewSchedule: true, enrollClients: false, sellSubscriptions: false,
     addExpenses: false, manageTrainings: false, manageSubscriptionPlans: false,
     manageStaff: false, manageSettings: false, manageSalesPlan: false,
-    menuAnalytics: true, menuReports: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
+    menuAnalytics: true, menuReports: true, menuMarketing: true, menuDashboard: true, menuClients: true, menuSchedule: true, menuSubscriptions: false, menuSales: false, menuFinance: false, menuCash: false, menuBranches: false, menuStaff: false, menuSettings: false,
   },
 };
 
