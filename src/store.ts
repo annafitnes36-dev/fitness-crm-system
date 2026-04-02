@@ -2722,6 +2722,7 @@ export function useStore() {
           bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || cur.bonusSettings,
           salesPlans: mergeSalesPlans(dbState.salesPlans || [], cur.salesPlans || []),
+          dashboardHiddenIds: Array.from(new Set([...(cur.dashboardHiddenIds || []), ...(dbState.dashboardHiddenIds || [])])),
           currentStaffId: cur.currentStaffId,
           currentBranchId: cur.currentBranchId,
         };
