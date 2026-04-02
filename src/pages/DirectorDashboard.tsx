@@ -136,7 +136,16 @@ export default function DirectorDashboard({ store }: DirectorDashboardProps) {
     [state.sales, monthStart, monthEndExcl, branchFilter]
   );
 
-  const subSales = allMonthSales.filter(s => s.type === 'subscription' && !s.isRefund);
+  const allBranchSales = state.sales.filter(s => bf(s.branchId));
+  const refundedSaleIds = new Set<string>();
+  allBranchSales.filter(s => s.isRefund).forEach(refund => {
+    const original = allBranchSales
+      .filter(s => !s.isRefund && s.clientId === refund.clientId && s.itemId === refund.itemId && s.date <= refund.date)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (original) refundedSaleIds.add(original.id);
+  });
+
+  const subSales = allMonthSales.filter(s => s.type === 'subscription' && !s.isRefund && !refundedSaleIds.has(s.id));
   const singleSales = allMonthSales.filter(s => s.type === 'single');
   const refunds = allMonthSales.filter(s => s.isRefund);
 

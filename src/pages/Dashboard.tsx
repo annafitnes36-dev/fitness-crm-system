@@ -80,6 +80,7 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
   // Также исключаем продажи, по которым был сделан возврат
   const monthSubSales = allMonthSubSales.filter(s => !hiddenIds.has(s.id) && !s.isRefund && !refundedSaleIds.has(s.id));
   const totalSubs = monthSubSales.length;
+  // Исключаем продажи по которым был сделан возврат (refundedSaleIds) из всех счётчиков
   const firstTimeSubs = monthSubSales.filter(s => s.isFirstSubscription).length;
   const renewalSubs = monthSubSales.filter(s => s.isRenewal).length;
   const returnSubs = monthSubSales.filter(s => s.isReturn).length;
@@ -268,7 +269,8 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     }),
   };
 
-  const firstTimeSubSales = allMonthSubSales.filter(s => s.isFirstSubscription);
+  // Исключаем возвраты (isRefund) и продажи по которым был сделан возврат (refundedSaleIds)
+  const firstTimeSubSales = allMonthSubSales.filter(s => s.isFirstSubscription && !s.isRefund && !refundedSaleIds.has(s.id));
   const detailFirstTimeSubs: DetailData = {
     title: 'Купили абонемент (новички)',
     rows: firstTimeSubSales.map(s => {

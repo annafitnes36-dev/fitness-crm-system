@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StoreType } from '@/store';
 import Icon from '@/components/ui/icon';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SalesProps {
   store: StoreType;
@@ -12,7 +13,6 @@ const MONTH_NAMES = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ];
 
-// Локальная дата без сдвига часового пояса
 function getLocalDateStr(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -20,38 +20,42 @@ function getLocalDateStr(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+type CardKey = 'revenue' | 'subs' | 'cash' | 'card';
+
+interface CardModal {
+  key: CardKey;
+  title: string;
+}
+
 export default function Sales({ store, onSell }: SalesProps) {
   const { state, getClientFullName } = store;
   const now = new Date();
 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-indexed
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+  const [openCard, setOpenCard] = useState<CardModal | null>(null);
 
   const branches = state.branches || [];
 
-  // Фильтр по филиалу
   const branchSales = state.sales.filter(s => {
     if (selectedBranchId === 'all') return true;
     return s.branchId === selectedBranchId;
   });
 
-  // Определяем доступные месяцы (из реальных продаж + текущий)
   const availableMonths = new Set<string>();
   availableMonths.add(`${now.getFullYear()}-${now.getMonth()}`);
   branchSales.forEach(s => {
     if (s.date) {
-      // Парсим дату локально, без UTC-сдвига
       const parts = s.date.split('-');
       if (parts.length === 3) {
         const y = parseInt(parts[0]);
-        const m = parseInt(parts[1]) - 1; // 0-indexed
+        const m = parseInt(parts[1]) - 1;
         availableMonths.add(`${y}-${m}`);
       }
     }
   });
 
-  // Собираем список месяцев для переключателя, сортируем по дате desc
   const monthList = Array.from(availableMonths)
     .map(key => {
       const [y, m] = key.split('-').map(Number);
@@ -59,7 +63,6 @@ export default function Sales({ store, onSell }: SalesProps) {
     })
     .sort((a, b) => b.year - a.year || b.month - a.month);
 
-  // Фильтр по месяцу: используем строковое сравнение YYYY-MM-DD
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
   const monthSales = branchSales.filter(s => s.date && s.date.startsWith(monthPrefix));
 
@@ -68,7 +71,6 @@ export default function Sales({ store, onSell }: SalesProps) {
   const subSales = monthSales.filter(s => s.type === 'subscription' && !s.isRefund);
   const refunds = monthSales.filter(s => s.isRefund);
   const refundsTotal = refunds.reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
-  // Выручка: все поступления минус возвраты
   const totalRevenue = monthSales.filter(s => !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0) - refundsTotal;
   const cashTotal = monthSales.filter(s => s.paymentMethod === 'cash' && !s.isRefund).reduce((sum, s) => sum + s.finalPrice, 0)
     - refunds.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
@@ -97,11 +99,32 @@ export default function Sales({ store, onSell }: SalesProps) {
   const canGoPrev = currentIdx < monthList.length - 1;
   const canGoNext = currentIdx > 0;
 
+  const getCardSales = (key: CardKey) => {
+    switch (key) {
+      case 'revenue':
+        return monthSales.slice().reverse();
+      case 'subs':
+        return subSales.slice().reverse();
+      case 'cash':
+        return monthSales.filter(s => s.paymentMethod === 'cash').slice().reverse();
+      case 'card':
+        return monthSales.filter(s => s.paymentMethod === 'card').slice().reverse();
+    }
+  };
+
+  const modalSales = openCard ? getCardSales(openCard.key) : [];
+
+  const fmtSaleTag = (sale: typeof monthSales[0]) => {
+    if (sale.isRefund) return <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Возврат</span>;
+    if (sale.isFirstSubscription) return <span className="text-xs badge-new px-2 py-0.5 rounded-full">Первый</span>;
+    if (sale.isRenewal) return <span className="text-xs badge-loyal px-2 py-0.5 rounded-full">Продление</span>;
+    if (sale.isReturn) return <span className="text-xs badge-other px-2 py-0.5 rounded-full">Возврат кл.</span>;
+    return null;
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Верхняя панель: переключатель месяцев + филиалы */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Переключатель месяцев */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
             <button
@@ -136,7 +159,6 @@ export default function Sales({ store, onSell }: SalesProps) {
           )}
         </div>
 
-        {/* Переключатель по филиалам */}
         {branches.length > 1 && (
           <div className="flex items-center gap-1.5 bg-white border border-border rounded-xl px-2 py-1.5 shadow-sm">
             <Icon name="MapPin" size={14} className="text-muted-foreground ml-1" />
@@ -168,22 +190,34 @@ export default function Sales({ store, onSell }: SalesProps) {
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        <div className="stat-card">
+        <button
+          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
+          onClick={() => setOpenCard({ key: 'revenue', title: 'Все операции за месяц' })}
+        >
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Выручка за месяц</div>
           <div className="text-2xl font-semibold">{totalRevenue.toLocaleString()} ₽</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
+          onClick={() => setOpenCard({ key: 'subs', title: 'Продажи абонементов' })}
+        >
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Абонементов</div>
           <div className="text-2xl font-semibold">{subSales.length}</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
+          onClick={() => setOpenCard({ key: 'cash', title: 'Операции наличными' })}
+        >
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Наличные</div>
           <div className="text-2xl font-semibold">{cashTotal.toLocaleString()} ₽</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
+          onClick={() => setOpenCard({ key: 'card', title: 'Операции безналичными' })}
+        >
           <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Безналичные</div>
           <div className="text-2xl font-semibold">{cardTotal.toLocaleString()} ₽</div>
-        </div>
+        </button>
       </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
@@ -259,6 +293,59 @@ export default function Sales({ store, onSell }: SalesProps) {
           </div>
         )}
       </div>
+
+      {/* Модал детализации карточки */}
+      <Dialog open={!!openCard} onOpenChange={() => setOpenCard(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{openCard?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            {modalSales.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">Нет операций</div>
+            ) : (
+              <div className="divide-y divide-border">
+                {modalSales.map(sale => {
+                  const client = state.clients.find(c => c.id === sale.clientId);
+                  const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
+                  const clientName = client ? `${client.lastName} ${client.firstName}`.trim() : '—';
+                  return (
+                    <div key={sale.id} className="py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{clientName}</span>
+                          {fmtSaleTag(sale)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {sale.itemName}
+                          {staffName && <span> · {staffName}</span>}
+                          <span> · {sale.date}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className={`font-semibold text-sm ${sale.isRefund ? 'text-red-600' : ''}`}>
+                          {sale.isRefund ? '−' : ''}{Math.abs(sale.finalPrice).toLocaleString()} ₽
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {sale.paymentMethod === 'card' ? 'Безнал' : sale.paymentMethod === 'bonus' ? 'Бонусы' : 'Нал'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {openCard && (
+            <div className="pt-3 border-t border-border text-sm text-muted-foreground flex justify-between">
+              <span>{modalSales.length} операций</span>
+              <span className="font-medium text-foreground">
+                {modalSales.reduce((s, x) => s + (x.isRefund ? -Math.abs(x.finalPrice) : x.finalPrice), 0).toLocaleString()} ₽
+              </span>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
