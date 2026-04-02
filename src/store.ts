@@ -3544,7 +3544,18 @@ export function useStore() {
 
   const openShift = (staffId: string, branchId: string) => {
     const shift: Shift = { id: genId(), branchId, staffId, openedAt: new Date().toISOString() };
-    update(s => ({ ...s, shifts: [...(s.shifts || []), shift] }));
+    // Закрываем все висящие незакрытые смены этого сотрудника в этом филиале перед открытием новой
+    update(s => ({
+      ...s,
+      shifts: [
+        ...(s.shifts || []).map(sh =>
+          sh.staffId === staffId && sh.branchId === branchId && !sh.closedAt
+            ? { ...sh, closedAt: shift.openedAt }
+            : sh
+        ),
+        shift,
+      ],
+    }));
     return shift;
   };
 
@@ -3553,7 +3564,11 @@ export function useStore() {
   };
 
   const getActiveShift = (staffId: string, branchId: string) => {
-    return (state.shifts || []).find(sh => sh.staffId === staffId && sh.branchId === branchId && !sh.closedAt) || null;
+    // Берём последнюю открытую смену (по openedAt) для этого сотрудника и филиала
+    const active = (state.shifts || [])
+      .filter(sh => sh.staffId === staffId && sh.branchId === branchId && !sh.closedAt)
+      .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+    return active[0] || null;
   };
 
   // Бонусная система
