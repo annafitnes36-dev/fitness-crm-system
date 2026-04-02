@@ -778,7 +778,27 @@ export default function Schedule({ store, onSell }: ScheduleProps) {
               {selectedEntry.enrolledClientIds.map(clientId => {
                 const client = state.clients.find(c => c.id === clientId);
                 const visit = state.visits.find(v => v.clientId === clientId && v.scheduleEntryId === selectedEntry.id);
-                if (!client) return null;
+                if (!client) {
+                  // Клиент удалён из базы — показываем заглушку с кнопкой удаления записи
+                  return (
+                    <div key={clientId} className="px-4 py-3 border-b border-border last:border-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-muted-foreground italic">Клиент удалён</span>
+                        <button
+                          onClick={() => {
+                            if (visit?.id) deleteVisit(visit.id);
+                            else updateScheduleEntry(selectedEntry.id, {
+                              enrolledClientIds: selectedEntry.enrolledClientIds.filter(id => id !== clientId)
+                            });
+                          }}
+                          className="text-xs px-2 py-1 rounded bg-secondary text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors font-medium"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 const isFirst = isFirstEverTraining(clientId);
                 const subEnding = isSubEndingToday(clientId);
                 const clientSub = client.activeSubscriptionId ? state.subscriptions.find(s => s.id === client.activeSubscriptionId) : null;
