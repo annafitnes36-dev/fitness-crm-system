@@ -2460,8 +2460,8 @@ let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _saving = false;
 // Локальный авторитетный список скрытых позиций — обновляется при каждом hide/restore
 // и всегда имеет приоритет над данными из DB при polling
-const _localHiddenIds: string[] | null = null;
-const _lastHiddenSaveTime = 0;
+let _localHiddenIds: string[] | null = null;
+let _lastHiddenSaveTime = 0;
 
 async function flushToDb(): Promise<void> {
   if (!_pendingState || _saving) return;
