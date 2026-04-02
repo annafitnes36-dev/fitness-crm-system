@@ -2458,6 +2458,10 @@ let _pendingState: AppState | null = null;
 let _pendingOnSync: ((ok: boolean) => void) | null = null;
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _saving = false;
+// Локальный авторитетный список скрытых позиций — обновляется при каждом hide/restore
+// и всегда имеет приоритет над данными из DB при polling
+const _localHiddenIds: string[] | null = null;
+const _lastHiddenSaveTime = 0;
 
 async function flushToDb(): Promise<void> {
   if (!_pendingState || _saving) return;
@@ -2722,7 +2726,10 @@ export function useStore() {
           bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || cur.bonusSettings,
           salesPlans: mergeSalesPlans(dbState.salesPlans || [], cur.salesPlans || []),
-          dashboardHiddenIds: Array.from(new Set([...(cur.dashboardHiddenIds || []), ...(dbState.dashboardHiddenIds || [])])),
+          // Если за последние 30 сек было локальное изменение — берём локальный список как авторитетный
+          dashboardHiddenIds: (Date.now() - _lastHiddenSaveTime < 30000 && _localHiddenIds !== null)
+            ? _localHiddenIds
+            : Array.from(new Set([...(cur.dashboardHiddenIds || []), ...(dbState.dashboardHiddenIds || [])])),
           currentStaffId: cur.currentStaffId,
           currentBranchId: cur.currentBranchId,
         };
@@ -3295,17 +3302,21 @@ export function useStore() {
   };
 
   const hideDashboardItem = (id: string) => {
-    update(s => ({
-      ...s,
-      dashboardHiddenIds: [...(s.dashboardHiddenIds || []), id],
-    }));
+    update(s => {
+      const next = [...new Set([...(s.dashboardHiddenIds || []), id])];
+      _localHiddenIds = next;
+      _lastHiddenSaveTime = Date.now();
+      return { ...s, dashboardHiddenIds: next };
+    });
   };
 
   const restoreDashboardItem = (id: string) => {
-    update(s => ({
-      ...s,
-      dashboardHiddenIds: (s.dashboardHiddenIds || []).filter(hid => hid !== id),
-    }));
+    update(s => {
+      const next = (s.dashboardHiddenIds || []).filter(hid => hid !== id);
+      _localHiddenIds = next;
+      _lastHiddenSaveTime = Date.now();
+      return { ...s, dashboardHiddenIds: next };
+    });
   };
 
   const addContactChannel = (channel: string) => {
