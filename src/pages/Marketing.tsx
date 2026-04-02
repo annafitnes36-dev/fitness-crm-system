@@ -130,11 +130,7 @@ export default function Marketing({ store }: MarketingProps) {
 
   // --- ТАБЛИЦА: Рекламные источники ---
   const adSourcesTable = useMemo(() => {
-    const sources = [...new Set([
-      ...state.adSources,
-      ...branchClients.map(c => c.adSource).filter(Boolean),
-      ...state.inquiries.filter(i => targetBranches.includes(i.branchId)).map(i => i.adSource).filter(Boolean),
-    ])].filter(Boolean);
+    const sources = state.adSources.filter(Boolean);
 
     // Общие структуры для всех источников
     const branchScheduleIds = new Set(
