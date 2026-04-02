@@ -136,6 +136,38 @@ export default function Marketing({ store }: MarketingProps) {
       ...state.inquiries.filter(i => targetBranches.includes(i.branchId)).map(i => i.adSource).filter(Boolean),
     ])].filter(Boolean);
 
+    // Общие структуры для всех источников
+    const branchScheduleIds = new Set(
+      state.schedule.filter(e => targetBranches.includes(e.branchId)).map(e => e.id)
+    );
+
+    // Все визиты (attended/enrolled/missed) по филиалу за всё время
+    const clientAllVisits: Record<string, string[]> = {};
+    state.visits.filter(v =>
+      (v.status === 'attended' || v.status === 'enrolled' || v.status === 'missed') &&
+      branchScheduleIds.has(v.scheduleEntryId)
+    ).forEach(v => {
+      if (!clientAllVisits[v.clientId]) clientAllVisits[v.clientId] = [];
+      clientAllVisits[v.clientId].push(v.date);
+    });
+
+    // Только attended — для доходимости
+    const branchAttendedByClient: Record<string, string[]> = {};
+    state.visits.filter(v =>
+      v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId)
+    ).forEach(v => {
+      if (!branchAttendedByClient[v.clientId]) branchAttendedByClient[v.clientId] = [];
+      branchAttendedByClient[v.clientId].push(v.date);
+    });
+
+    const refundedSaleIds = new Set<string>();
+    state.sales.filter(s => s.isRefund && targetBranches.includes(s.branchId)).forEach(refund => {
+      const original = state.sales
+        .filter(s => !s.isRefund && s.clientId === refund.clientId && s.itemId === refund.itemId && s.date <= refund.date && targetBranches.includes(s.branchId))
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      if (original) refundedSaleIds.add(original.id);
+    });
+
     return sources.map(src => {
       // Обращения: inquiries + новые клиенты (не скрытые), за выбранный месяц
       const inquiriesCount = state.inquiries.filter(i =>
@@ -152,22 +184,6 @@ export default function Marketing({ store }: MarketingProps) {
       ).length;
 
       const totalInquiries = inquiriesCount + newClientsCount;
-
-      // Записи на первую тренировку
-      // Клиенты с этим adSource, у которых первая запись (visited) в этом месяце
-      const branchScheduleIds = new Set(
-        state.schedule.filter(e => targetBranches.includes(e.branchId)).map(e => e.id)
-      );
-
-      // Все посещения клиентов за всё время (по текущей ветке)
-      const clientAllVisits: Record<string, string[]> = {};
-      state.visits.filter(v =>
-        (v.status === 'attended' || v.status === 'enrolled' || v.status === 'missed') &&
-        branchScheduleIds.has(v.scheduleEntryId)
-      ).forEach(v => {
-        if (!clientAllVisits[v.clientId]) clientAllVisits[v.clientId] = [];
-        clientAllVisits[v.clientId].push(v.date);
-      });
 
       const firstEnrollsCount = new Set(
         state.visits
@@ -190,14 +206,6 @@ export default function Marketing({ store }: MarketingProps) {
       ).size;
 
       // Продажи (купили новички) — isFirstSubscription, не скрытые, этот месяц, этот источник
-      const refundedSaleIds = new Set<string>();
-      state.sales.filter(s => s.isRefund && targetBranches.includes(s.branchId)).forEach(refund => {
-        const original = state.sales
-          .filter(s => !s.isRefund && s.clientId === refund.clientId && s.itemId === refund.itemId && s.date <= refund.date && targetBranches.includes(s.branchId))
-          .sort((a, b) => b.date.localeCompare(a.date))[0];
-        if (original) refundedSaleIds.add(original.id);
-      });
-
       const salesCount = state.sales.filter(s =>
         targetBranches.includes(s.branchId) &&
         s.type === 'subscription' &&
@@ -212,8 +220,26 @@ export default function Marketing({ store }: MarketingProps) {
         })()
       ).length;
 
-      return { src, totalInquiries, firstEnrollsCount, salesCount };
-    }).filter(row => row.totalInquiries > 0 || row.firstEnrollsCount > 0 || row.salesCount > 0);
+      // Доходимость: дошло новичков — первый attended-визит в периоде, без абонемента, не скрытые, этот источник
+      const attendedNewbies = new Set(
+        state.visits
+          .filter(v => v.status === 'attended' && branchScheduleIds.has(v.scheduleEntryId))
+          .filter(v => {
+            const client = state.clients.find(c => c.id === v.clientId);
+            if (!client || client.adSource !== src) return false;
+            if (hiddenIds.has(v.clientId)) return false;
+            const allAttended = (branchAttendedByClient[v.clientId] || []).sort();
+            const firstDate = allAttended[0];
+            if (!firstDate || !inMonth(firstDate) || firstDate !== v.date) return false;
+            return !state.sales.some(s =>
+              s.clientId === v.clientId && s.type === 'subscription' && !s.isRefund && s.date <= v.date
+            );
+          })
+          .map(v => v.clientId)
+      ).size;
+
+      return { src, totalInquiries, firstEnrollsCount, attendedNewbies, salesCount };
+    }).filter(row => row.totalInquiries > 0 || row.firstEnrollsCount > 0 || row.attendedNewbies > 0 || row.salesCount > 0);
   }, [state, selectedMonth, selectedBranchId, hiddenIds]);
 
   // --- АНАЛИЗ ПО КАНАЛАМ СВЯЗИ ---
@@ -351,18 +377,24 @@ export default function Marketing({ store }: MarketingProps) {
                   <th className="text-left px-5 py-3 font-medium text-muted-foreground">Источник</th>
                   <th className="text-center px-4 py-3 font-medium text-muted-foreground">Обращения</th>
                   <th className="text-center px-4 py-3 font-medium text-muted-foreground">Записи</th>
+                  <th className="text-center px-4 py-3 font-medium text-muted-foreground">Доходимость</th>
                   <th className="text-center px-4 py-3 font-medium text-muted-foreground">Продажи</th>
                   <th className="text-center px-4 py-3 font-medium text-muted-foreground">Конверсия<br/><span className="text-[10px] font-normal">обр → продажа</span></th>
                 </tr>
               </thead>
               <tbody>
                 {adSourcesTable.map((row, i) => (
-                  <tr key={row.src} className={`border-b border-border/50 last:border-0 ${i % 2 === 0 ? '' : 'bg-secondary/10'}`}>
+                  <tr key={row.src} className={`border-b border-border/50 ${i % 2 === 0 ? '' : 'bg-secondary/10'}`}>
                     <td className="px-5 py-3 font-medium">{row.src || '—'}</td>
                     <td className="px-4 py-3 text-center">{row.totalInquiries}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={row.firstEnrollsCount > 0 ? 'text-blue-600 font-medium' : ''}>
                         {row.firstEnrollsCount}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={row.attendedNewbies > 0 ? 'text-violet-600 font-medium' : ''}>
+                        {row.attendedNewbies}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -385,6 +417,26 @@ export default function Marketing({ store }: MarketingProps) {
                     </td>
                   </tr>
                 ))}
+                <tr className="border-t-2 border-border bg-secondary/20 font-semibold">
+                  <td className="px-5 py-3">Итого</td>
+                  <td className="px-4 py-3 text-center">{adSourcesTable.reduce((s, r) => s + r.totalInquiries, 0)}</td>
+                  <td className="px-4 py-3 text-center">{adSourcesTable.reduce((s, r) => s + r.firstEnrollsCount, 0)}</td>
+                  <td className="px-4 py-3 text-center">{adSourcesTable.reduce((s, r) => s + r.attendedNewbies, 0)}</td>
+                  <td className="px-4 py-3 text-center">{adSourcesTable.reduce((s, r) => s + r.salesCount, 0)}</td>
+                  <td className="px-4 py-3 text-center">
+                    {adSourcesTable.reduce((s, r) => s + r.totalInquiries, 0) > 0 ? (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        convRate(adSourcesTable.reduce((s, r) => s + r.salesCount, 0), adSourcesTable.reduce((s, r) => s + r.totalInquiries, 0)) >= 20
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : convRate(adSourcesTable.reduce((s, r) => s + r.salesCount, 0), adSourcesTable.reduce((s, r) => s + r.totalInquiries, 0)) >= 10
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
+                      }`}>
+                        {convRate(adSourcesTable.reduce((s, r) => s + r.salesCount, 0), adSourcesTable.reduce((s, r) => s + r.totalInquiries, 0))}%
+                      </span>
+                    ) : '—'}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
