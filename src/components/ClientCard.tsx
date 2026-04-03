@@ -47,7 +47,7 @@ export default function ClientCard({ client, store, onClose, onSell }: ClientCar
   });
 
   const currentStaff = state.staff.find(m => m.id === state.currentStaffId);
-  const canEditStatus = currentStaff?.role === 'director' || currentStaff?.role === 'manager';
+  const canEditStatus = currentStaff?.role === 'director' || currentStaff?.role === 'manager' || currentStaff?.role === 'admin';
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
 

@@ -2623,6 +2623,8 @@ export function useStore() {
         staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
       };
       if (!merged.importedBorV1) { merged = applyBorImport(merged); merged.importedBorV1 = true; }
+      // Инициализируем локальный список скрытых из БД — он станет единственным источником правды
+      _localHiddenIds = merged.dashboardHiddenIds || [];
       setState(merged);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
       // Сразу сохраняем мёрдж обратно в БД чтобы закрепить
@@ -2726,10 +2728,8 @@ export function useStore() {
           bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || cur.bonusSettings,
           salesPlans: mergeSalesPlans(dbState.salesPlans || [], cur.salesPlans || []),
-          // Если за последние 30 сек было локальное изменение — берём локальный список как авторитетный
-          dashboardHiddenIds: (Date.now() - _lastHiddenSaveTime < 30000 && _localHiddenIds !== null)
-            ? _localHiddenIds
-            : Array.from(new Set([...(cur.dashboardHiddenIds || []), ...(dbState.dashboardHiddenIds || [])])),
+          // Локальный список скрытых — единственный источник правды (инициализируется из DB при загрузке)
+          dashboardHiddenIds: _localHiddenIds !== null ? _localHiddenIds : (dbState.dashboardHiddenIds || []),
           currentStaffId: cur.currentStaffId,
           currentBranchId: cur.currentBranchId,
         };
