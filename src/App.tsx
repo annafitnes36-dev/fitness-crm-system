@@ -65,6 +65,10 @@ export default function App() {
     const found = store.state.staff.find(s => s.id === savedStaffId);
     if (found) {
       store.setCurrentStaff(savedStaffId);
+      // При восстановлении сессии тоже переключаем на первый филиал сотрудника
+      if (found.branchIds?.length) {
+        store.setCurrentBranch(found.branchIds[0]);
+      }
       setIsAuthenticated(true);
     } else if (store.dbLoaded) {
       // Только сбрасываем если БД уже загружена и сотрудника нет

@@ -553,7 +553,13 @@ export interface AppState {
   bonusSettings: BonusSettings;
   bonusTransactions: BonusTransaction[];
   deletedClientIds: string[];
+  deletedSaleIds: string[];
+  deletedScheduleIds: string[];
+  deletedExpenseIds: string[];
+  deletedInquiryIds: string[];
   dashboardHiddenIds: string[]; // скрыты с дашборда, но не удалены из данных
+  // Переопределение категории продажи: 'renewal' | 'return' (возвращение)
+  saleOverrides: Record<string, 'renewal' | 'return'>;
 }
 
 const defaultStaff: StaffMember[] = [
@@ -610,7 +616,12 @@ const initialState: AppState = {
   bonusSettings: { enabled: false, accrualPercent: 5, expiryDays: 365 },
   bonusTransactions: [],
   deletedClientIds: [],
+  deletedSaleIds: [],
+  deletedScheduleIds: [],
+  deletedExpenseIds: [],
+  deletedInquiryIds: [],
   dashboardHiddenIds: [],
+  saleOverrides: {},
 };
 
 const STORAGE_KEY = 'fitcrm_state_v1';
@@ -2378,7 +2389,12 @@ function loadState(): AppState {
         failedNotifications: parsed.failedNotifications ?? {},
         notificationCategories: parsed.notificationCategories ?? DEFAULT_NOTIFICATION_CATEGORIES,
         deletedClientIds,
+        deletedSaleIds: parsed.deletedSaleIds ?? [],
+        deletedScheduleIds: parsed.deletedScheduleIds ?? [],
+        deletedExpenseIds: parsed.deletedExpenseIds ?? [],
+        deletedInquiryIds: parsed.deletedInquiryIds ?? [],
         dashboardHiddenIds: parsed.dashboardHiddenIds ?? [],
+        saleOverrides: parsed.saleOverrides ?? {},
       };
       // Миграция: импорт базы клиентов Цветной (v2 — полная база)
       if (!base.importedCvetnoiV2) {
@@ -2448,7 +2464,8 @@ const PATCH_KEYS: (keyof AppState)[] = [
   'notificationCategories', 'adSources', 'contactChannels',
   'salesPlans', 'monthlyPlans', 'expensePlans', 'expenseCategories',
   'bonusSettings', 'projectCode', 'dashboardHiddenIds',
-  'deletedClientIds',
+  'deletedClientIds', 'deletedSaleIds', 'deletedScheduleIds', 'deletedExpenseIds', 'deletedInquiryIds',
+  'saleOverrides',
   'importedCvetnoiV1', 'importedCvetnoiV2', 'importedCvetnoiV3',
   'importedBorV1', 'importedBorV2', 'importedTsentrV1', 'importedOlimpV1',
 ];
@@ -2461,7 +2478,7 @@ let _saving = false;
 // Локальный авторитетный список скрытых позиций — обновляется при каждом hide/restore
 // и всегда имеет приоритет над данными из DB при polling
 let _localHiddenIds: string[] | null = null;
-let _lastHiddenSaveTime = 0;
+const _lastHiddenSaveTime = 0;
 
 async function flushToDb(): Promise<void> {
   if (!_pendingState || _saving) return;
@@ -2699,10 +2716,14 @@ export function useStore() {
         });
         const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
         const extraStaff = cur.staff.filter(s => !dbStaffIds.has(s.id));
-        const pollingDeletedIds = new Set([
-          ...(cur.deletedClientIds || []),
-          ...(dbState.deletedClientIds || []),
-        ]);
+        // Объединяем все deletedIds (локальные + из БД) — союз всегда побеждает
+        const pollingDeletedClientIds = new Set([...(cur.deletedClientIds || []), ...(dbState.deletedClientIds || [])]);
+        const pollingDeletedSaleIds = new Set([...(cur.deletedSaleIds || []), ...(dbState.deletedSaleIds || [])]);
+        const pollingDeletedScheduleIds = new Set([...(cur.deletedScheduleIds || []), ...(dbState.deletedScheduleIds || [])]);
+        const pollingDeletedExpenseIds = new Set([...(cur.deletedExpenseIds || []), ...(dbState.deletedExpenseIds || [])]);
+        const pollingDeletedInquiryIds = new Set([...(cur.deletedInquiryIds || []), ...(dbState.deletedInquiryIds || [])]);
+        // Объединяем saleOverrides — локальные имеют приоритет
+        const mergedSaleOverrides = { ...(dbState.saleOverrides || {}), ...(cur.saleOverrides || {}) };
         // Мёрдж salesPlans: объединяем планы из БД с локальными (приоритет у локальных — они свежее)
         const mergeSalesPlans = (dbPlans: SalesPlan[], curPlans: SalesPlan[]): SalesPlan[] => {
           const curMap = new Map(curPlans.map(p => [`${p.branchId}::${p.month}`, p]));
@@ -2716,18 +2737,24 @@ export function useStore() {
         return {
           ...dbState,
           staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
-          clients: mergeByIdUpdating(dbState.clients || [], cur.clients || []).filter((c: Client) => !pollingDeletedIds.has(c.id)),
-          deletedClientIds: Array.from(pollingDeletedIds),
-          sales: mergeByIdUpdating(dbState.sales || [], cur.sales || []),
+          clients: mergeByIdUpdating(dbState.clients || [], cur.clients || []).filter((c: Client) => !pollingDeletedClientIds.has(c.id)),
+          deletedClientIds: Array.from(pollingDeletedClientIds),
+          sales: mergeByIdUpdating(dbState.sales || [], cur.sales || []).filter(s => !pollingDeletedSaleIds.has(s.id)),
+          deletedSaleIds: Array.from(pollingDeletedSaleIds),
           subscriptions: mergeByIdUpdating(dbState.subscriptions || [], cur.subscriptions || []),
-          schedule: mergeByIdUpdating(dbState.schedule || [], cur.schedule || []),
+          schedule: mergeByIdUpdating(dbState.schedule || [], cur.schedule || []).filter(e => !pollingDeletedScheduleIds.has(e.id)),
+          deletedScheduleIds: Array.from(pollingDeletedScheduleIds),
           visits: mergeByIdUpdating(dbState.visits || [], cur.visits || []),
-          expenses: mergeByIdUpdating(dbState.expenses || [], cur.expenses || []),
+          expenses: mergeByIdUpdating(dbState.expenses || [], cur.expenses || []).filter(e => !pollingDeletedExpenseIds.has(e.id)),
+          deletedExpenseIds: Array.from(pollingDeletedExpenseIds),
           cashOperations: mergeByIdUpdating(dbState.cashOperations || [], cur.cashOperations || []),
           shifts: mergeByIdUpdating(dbState.shifts || [], cur.shifts || []),
           bonusTransactions: mergeByIdUpdating(dbState.bonusTransactions || [], cur.bonusTransactions || []),
           bonusSettings: dbState.bonusSettings || cur.bonusSettings,
           salesPlans: mergeSalesPlans(dbState.salesPlans || [], cur.salesPlans || []),
+          inquiries: mergeByIdUpdating(dbState.inquiries || [], cur.inquiries || []).filter(i => !pollingDeletedInquiryIds.has(i.id)),
+          deletedInquiryIds: Array.from(pollingDeletedInquiryIds),
+          saleOverrides: mergedSaleOverrides,
           // Локальный список скрытых — единственный источник правды (инициализируется из DB при загрузке)
           dashboardHiddenIds: _localHiddenIds !== null ? _localHiddenIds : (dbState.dashboardHiddenIds || []),
           currentStaffId: cur.currentStaffId,
@@ -3085,7 +3112,11 @@ export function useStore() {
   };
 
   const removeScheduleEntry = (id: string) => {
-    update(s => ({ ...s, schedule: s.schedule.filter(e => e.id !== id) }));
+    update(s => ({
+      ...s,
+      schedule: s.schedule.filter(e => e.id !== id),
+      deletedScheduleIds: [...new Set([...(s.deletedScheduleIds || []), id])],
+    }));
   };
 
   const enrollClient = (scheduleId: string, clientId: string) => {
@@ -3208,7 +3239,11 @@ export function useStore() {
   };
 
   const deleteInquiry = (id: string) => {
-    update(s => ({ ...s, inquiries: s.inquiries.filter(i => i.id !== id) }));
+    update(s => ({
+      ...s,
+      inquiries: s.inquiries.filter(i => i.id !== id),
+      deletedInquiryIds: [...new Set([...(s.deletedInquiryIds || []), id])],
+    }));
   };
 
   const deleteSale = (id: string) => {
@@ -3265,6 +3300,7 @@ export function useStore() {
         subscriptions: newSubscriptions,
         clients: newClients,
         visits: newVisits,
+        deletedSaleIds: [...new Set([...(s.deletedSaleIds || []), id])],
       };
     });
   };
@@ -3301,21 +3337,31 @@ export function useStore() {
     });
   };
 
-  const hideDashboardItem = (id: string) => {
+  // cardKey — ключ карточки ('firstTimeSubs', 'totalSubs', 'inquiries', ...), id — ID сущности
+  // Формат хранения: "cardKey:id" — скрытие в одной карточке не влияет на другие
+  const hideDashboardItem = (cardKey: string, id: string) => {
     update(s => {
-      const next = [...new Set([...(s.dashboardHiddenIds || []), id])];
+      const key = `${cardKey}:${id}`;
+      const next = [...new Set([...(s.dashboardHiddenIds || []), key])];
       _localHiddenIds = next;
-      _lastHiddenSaveTime = Date.now();
       return { ...s, dashboardHiddenIds: next };
     });
   };
 
-  const restoreDashboardItem = (id: string) => {
+  const restoreDashboardItem = (cardKey: string, id: string) => {
     update(s => {
-      const next = (s.dashboardHiddenIds || []).filter(hid => hid !== id);
+      const key = `${cardKey}:${id}`;
+      const next = (s.dashboardHiddenIds || []).filter(hid => hid !== key);
       _localHiddenIds = next;
-      _lastHiddenSaveTime = Date.now();
       return { ...s, dashboardHiddenIds: next };
+    });
+  };
+
+  const setSaleOverride = (saleId: string, category: 'renewal' | 'return' | null) => {
+    update(s => {
+      const overrides = { ...(s.saleOverrides || {}) };
+      if (category === null) { delete overrides[saleId]; } else { overrides[saleId] = category; }
+      return { ...s, saleOverrides: overrides };
     });
   };
 
@@ -3360,7 +3406,11 @@ export function useStore() {
   };
 
   const deleteExpense = (id: string) => {
-    update(s => ({ ...s, expenses: s.expenses.filter(e => e.id !== id) }));
+    update(s => ({
+      ...s,
+      expenses: s.expenses.filter(e => e.id !== id),
+      deletedExpenseIds: [...new Set([...(s.deletedExpenseIds || []), id])],
+    }));
   };
 
   const addExpenseCategory = (category: Omit<ExpenseCategory, 'id'>) => {
@@ -3639,7 +3689,7 @@ export function useStore() {
     dismissNotification, restoreNotification, failNotification,
     addNotificationCategory, updateNotificationCategory, removeNotificationCategory,
     addCashOperation, deleteCashOperation, updateProjectCode,
-    openShift, closeShift, getActiveShift,
+    openShift, closeShift, getActiveShift, setSaleOverride,
     getClientBonusBalance, accrueBonus, spendBonus, updateBonusSettings,
     importState: (imported: AppState) => {
       setState(imported);

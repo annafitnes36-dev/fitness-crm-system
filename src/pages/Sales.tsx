@@ -21,7 +21,7 @@ interface CardModal {
 }
 
 export default function Sales({ store, onSell }: SalesProps) {
-  const { state, hideDashboardItem, restoreDashboardItem } = store;
+  const { state, hideDashboardItem, restoreDashboardItem, deleteSale } = store;
   const now = new Date();
 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -31,6 +31,8 @@ export default function Sales({ store, onSell }: SalesProps) {
 
   const branches = state.branches || [];
   const hiddenIds = new Set(state.dashboardHiddenIds || []);
+  const SALES_CARD_KEY = 'sales';
+  const isSaleHidden = (id: string) => hiddenIds.has(`${SALES_CARD_KEY}:${id}`);
 
   const branchSales = state.sales.filter(s => {
     if (selectedBranchId === 'all') return true;
@@ -61,7 +63,7 @@ export default function Sales({ store, onSell }: SalesProps) {
   // Все продажи месяца (включая скрытые) — для таблицы истории
   const monthSalesAll = branchSales.filter(s => s.date && s.date.startsWith(monthPrefix));
   // Видимые продажи — для счётчиков карточек
-  const monthSales = monthSalesAll.filter(s => !hiddenIds.has(s.id));
+  const monthSales = monthSalesAll.filter(s => !isSaleHidden(s.id));
 
   const staffMap = new Map(state.staff.map(s => [s.id, s.name]));
 
@@ -75,6 +77,10 @@ export default function Sales({ store, onSell }: SalesProps) {
     - refunds.filter(s => s.paymentMethod === 'card').reduce((sum, s) => sum + Math.abs(s.finalPrice), 0);
 
   const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+
+  const currentStaff = state.staff.find(s => s.id === state.currentStaffId);
+  const canDeleteSales = currentStaff?.role === 'director' || currentStaff?.role === 'manager' ||
+    currentStaff?.permissions?.editDeleteOperations === true;
 
   const handlePrev = () => {
     const idx = monthList.findIndex(m => m.year === selectedYear && m.month === selectedMonth);
@@ -107,7 +113,7 @@ export default function Sales({ store, onSell }: SalesProps) {
   };
 
   const modalSales = openCard ? getCardSales(openCard.key) : [];
-  const modalHiddenCount = modalSales.filter(s => hiddenIds.has(s.id)).length;
+  const modalHiddenCount = modalSales.filter(s => isSaleHidden(s.id)).length;
 
   const fmtSaleTag = (sale: typeof monthSalesAll[0]) => {
     if (sale.isRefund) return <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Возврат</span>;
@@ -245,13 +251,14 @@ export default function Sales({ store, onSell }: SalesProps) {
               <th>Метка</th>
               <th>Сотрудник</th>
               <th>Дата</th>
+              {canDeleteSales && <th></th>}
             </tr>
           </thead>
           <tbody>
             {monthSalesAll.slice().reverse().map(sale => {
               const client = state.clients.find(c => c.id === sale.clientId);
               const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
-              const isHidden = hiddenIds.has(sale.id);
+              const isHidden = isSaleHidden(sale.id);
               return (
                 <tr key={sale.id} className={isHidden ? 'opacity-40' : ''}>
                   <td className="font-medium">{client ? `${client.lastName} ${client.firstName}` : '—'}</td>
@@ -278,6 +285,21 @@ export default function Sales({ store, onSell }: SalesProps) {
                   </td>
                   <td className="text-sm text-muted-foreground">{staffName || '—'}</td>
                   <td className="text-sm text-muted-foreground">{sale.date}</td>
+                  {canDeleteSales && (
+                    <td className="text-right pr-2">
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Удалить продажу "${sale.itemName}" для ${client ? `${client.lastName} ${client.firstName}` : 'клиента'}? Это действие нельзя отменить.`)) {
+                            deleteSale(sale.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Удалить продажу"
+                      >
+                        <Icon name="Trash2" size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -312,7 +334,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                   const client = state.clients.find(c => c.id === sale.clientId);
                   const staffName = sale.staffId ? staffMap.get(sale.staffId) : null;
                   const clientName = client ? `${client.lastName} ${client.firstName}`.trim() : '—';
-                  const isHidden = hiddenIds.has(sale.id);
+                  const isHidden = isSaleHidden(sale.id);
                   return (
                     <div key={sale.id} className={`py-3 flex items-center gap-3 ${isHidden ? 'opacity-40' : ''}`}>
                       <div className="flex-1 min-w-0">
@@ -335,7 +357,7 @@ export default function Sales({ store, onSell }: SalesProps) {
                         </div>
                       </div>
                       <button
-                        onClick={() => isHidden ? restoreDashboardItem(sale.id) : hideDashboardItem(sale.id)}
+                        onClick={() => isHidden ? restoreDashboardItem(SALES_CARD_KEY, sale.id) : hideDashboardItem(SALES_CARD_KEY, sale.id)}
                         className={`shrink-0 p-1.5 rounded-lg transition-colors ${isHidden ? 'text-amber-500 hover:text-emerald-600 hover:bg-emerald-50' : 'text-muted-foreground hover:text-red-500 hover:bg-red-50'}`}
                         title={isHidden ? 'Включить в статистику' : 'Скрыть из статистики'}
                       >
@@ -349,9 +371,9 @@ export default function Sales({ store, onSell }: SalesProps) {
           </div>
           {openCard && (
             <div className="pt-3 border-t border-border text-sm text-muted-foreground flex justify-between">
-              <span>{modalSales.filter(s => !hiddenIds.has(s.id)).length} активных · {modalHiddenCount} скрыто</span>
+              <span>{modalSales.filter(s => !isSaleHidden(s.id)).length} активных · {modalHiddenCount} скрыто</span>
               <span className="font-medium text-foreground">
-                {modalSales.filter(s => !hiddenIds.has(s.id)).reduce((s, x) => s + (x.isRefund ? -Math.abs(x.finalPrice) : x.finalPrice), 0).toLocaleString()} ₽
+                {modalSales.filter(s => !isSaleHidden(s.id)).reduce((s, x) => s + (x.isRefund ? -Math.abs(x.finalPrice) : x.finalPrice), 0).toLocaleString()} ₽
               </span>
             </div>
           )}
