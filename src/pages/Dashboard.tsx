@@ -173,10 +173,14 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
 
   // Sales plan
   const currentPlan = state.salesPlans.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
-  // Monthly plan for renewals/returns targets
+  // Monthly plan for funnel + renewals/returns targets
   const currentMonthlyPlan = state.monthlyPlans?.find(p => p.branchId === state.currentBranchId && p.month === currentMonth);
   const renewalTarget = currentMonthlyPlan?.plan?.renewals ?? 0;
   const returnTarget = currentMonthlyPlan?.plan?.returns ?? 0;
+  const inquiriesTarget = currentMonthlyPlan?.plan?.inquiries ?? 0;
+  const enrollmentsTarget = currentMonthlyPlan?.plan?.newbieEnrollments ?? 0;
+  const attendedTarget = currentMonthlyPlan?.plan?.newbieAttended ?? 0;
+  const newbieSalesTarget = currentMonthlyPlan?.plan?.newbieSales ?? 0;
 
   const branchPlans = (() => {
     if (currentPlan && currentPlan.items.length > 0) {
@@ -418,37 +422,45 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
       key: 'inquiries' as DetailKey,
       label: 'Обращений',
       value: totalInquiries,
-      color: 'bg-violet-100 border-violet-300',
+      plan: inquiriesTarget,
+      color: 'bg-violet-50 border-violet-200',
+      barColor: 'bg-violet-400',
       textColor: 'text-violet-700',
-      width: '100%',
-      conv: convInquiryToEnroll,
+      convNext: convInquiryToEnroll,
+      convLabel: '→ запись',
     },
     {
       key: 'firstEnrollments' as DetailKey,
       label: 'Записей на пробную',
       value: firstEnrollmentsCount,
-      color: 'bg-indigo-100 border-indigo-300',
+      plan: enrollmentsTarget,
+      color: 'bg-indigo-50 border-indigo-200',
+      barColor: 'bg-indigo-400',
       textColor: 'text-indigo-700',
-      width: '85%',
-      conv: convEnrollToAttend,
+      convNext: convEnrollToAttend,
+      convLabel: '→ дошло',
     },
     {
       key: 'attendedNewbies' as DetailKey,
       label: 'Дошло новичков',
       value: attendedNewbiesCount,
-      color: 'bg-blue-100 border-blue-300',
+      plan: attendedTarget,
+      color: 'bg-blue-50 border-blue-200',
+      barColor: 'bg-blue-400',
       textColor: 'text-blue-700',
-      width: '70%',
-      conv: convAttendToBuy,
+      convNext: convAttendToBuy,
+      convLabel: '→ купили',
     },
     {
       key: 'firstTimeSubs' as DetailKey,
       label: 'Купили (новички)',
       value: firstTimeSubs,
-      color: 'bg-emerald-100 border-emerald-300',
+      plan: newbieSalesTarget,
+      color: 'bg-emerald-50 border-emerald-200',
+      barColor: 'bg-emerald-400',
       textColor: 'text-emerald-700',
-      width: '55%',
-      conv: null,
+      convNext: null,
+      convLabel: null,
     },
   ];
 
@@ -488,126 +500,137 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         )}
       </div>
 
-      {/* Main stats: left column (35%) + right column funnel (65%) */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '35% 1fr' }}>
-        {/* Left column: compact stat cards */}
-        <div className="space-y-3">
+      {/* Main stats: left cards + right funnel — half screen each */}
+      <div className="grid grid-cols-2 gap-3">
+
+        {/* Left: compact stat cards */}
+        <div className="grid grid-cols-2 gap-2">
           {/* Total sales */}
-          <button
-            onClick={() => setActiveDetailKey('totalSubs')}
-            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
-          >
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Продаж всего</span>
-              <Icon name="CreditCard" size={14} className="text-foreground" />
+          <button onClick={() => setActiveDetailKey('totalSubs')}
+            className="bg-white border border-border rounded-xl p-3 text-left hover:ring-2 hover:ring-border transition-all">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Продаж всего</span>
+              <Icon name="CreditCard" size={12} className="text-foreground" />
             </div>
-            <div className="text-3xl font-bold">{totalSubs}</div>
+            <div className="text-2xl font-bold leading-none">{totalSubs}</div>
             {totalPct !== null && (
-              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${totalPct >= 100 ? 'bg-emerald-500' : totalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                  style={{ width: `${Math.min(100, totalPct)}%` }}
-                />
+              <div className="mt-1.5 h-1 bg-secondary rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${totalPct >= 100 ? 'bg-emerald-500' : totalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, totalPct)}%` }} />
               </div>
             )}
-            <div className="text-xs text-muted-foreground mt-1">
+            <div className="text-[10px] text-muted-foreground mt-1">
               {totalTarget > 0 ? `план ${totalTarget} · ${totalPct ?? 0}%` : 'план не задан'}
             </div>
           </button>
 
-          {/* Renewals */}
-          <button
-            onClick={() => setActiveDetailKey('renewals')}
-            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
-          >
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Продления</span>
-              <Icon name="RefreshCw" size={14} className="text-sky-500" />
+          {/* Average check */}
+          <div className="bg-white border border-border rounded-xl p-3">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Средний чек</span>
+              <Icon name="Banknote" size={12} className="text-amber-500" />
             </div>
-            <div className="text-3xl font-bold">{renewalSubSalesCount}</div>
+            <div className="text-2xl font-bold leading-none">
+              {factAvgCheck > 0 ? factAvgCheck.toLocaleString('ru-RU') + ' ₽' : '—'}
+            </div>
+            {planAvgCheck > 0 ? (
+              <div className="text-[10px] text-muted-foreground mt-1">
+                план {planAvgCheck.toLocaleString('ru-RU')} ₽
+                {avgCheckPct !== null && (
+                  <span className={`ml-1 font-medium ${avgCheckPct >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>{avgCheckPct}%</span>
+                )}
+              </div>
+            ) : (
+              <div className="text-[10px] text-muted-foreground mt-1">план не задан</div>
+            )}
+          </div>
+
+          {/* Renewals */}
+          <button onClick={() => setActiveDetailKey('renewals')}
+            className="bg-white border border-border rounded-xl p-3 text-left hover:ring-2 hover:ring-border transition-all">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Продления</span>
+              <Icon name="RefreshCw" size={12} className="text-sky-500" />
+            </div>
+            <div className="text-2xl font-bold leading-none text-sky-700">{renewalSubSalesCount}</div>
             {renewalPct !== null && (
-              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${renewalPct >= 100 ? 'bg-emerald-500' : renewalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                  style={{ width: `${Math.min(100, renewalPct)}%` }}
-                />
+              <div className="mt-1.5 h-1 bg-secondary rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${renewalPct >= 100 ? 'bg-emerald-500' : renewalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, renewalPct)}%` }} />
               </div>
             )}
-            <div className="text-xs text-muted-foreground mt-1">
+            <div className="text-[10px] text-muted-foreground mt-1">
               {renewalTarget > 0 ? `план ${renewalTarget} · ${renewalPct ?? 0}%` : 'план не задан'}
             </div>
           </button>
 
           {/* Returns */}
-          <button
-            onClick={() => setActiveDetailKey('returns')}
-            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
-          >
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Возвращения</span>
-              <Icon name="UserCheck" size={14} className="text-teal-500" />
+          <button onClick={() => setActiveDetailKey('returns')}
+            className="bg-white border border-border rounded-xl p-3 text-left hover:ring-2 hover:ring-border transition-all">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Возвращения</span>
+              <Icon name="UserCheck" size={12} className="text-teal-500" />
             </div>
-            <div className="text-3xl font-bold">{returnSubSalesCount}</div>
+            <div className="text-2xl font-bold leading-none text-teal-700">{returnSubSalesCount}</div>
             {returnPct !== null && (
-              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${returnPct >= 100 ? 'bg-emerald-500' : returnPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                  style={{ width: `${Math.min(100, returnPct)}%` }}
-                />
+              <div className="mt-1.5 h-1 bg-secondary rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${returnPct >= 100 ? 'bg-emerald-500' : returnPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, returnPct)}%` }} />
               </div>
             )}
-            <div className="text-xs text-muted-foreground mt-1">
+            <div className="text-[10px] text-muted-foreground mt-1">
               {returnTarget > 0 ? `план ${returnTarget} · ${returnPct ?? 0}%` : 'план не задан'}
             </div>
           </button>
-
-          {/* Average check */}
-          <div className="stat-card">
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Средний чек</span>
-              <Icon name="Banknote" size={14} className="text-amber-500" />
-            </div>
-            <div className="text-3xl font-bold">
-              {factAvgCheck > 0 ? factAvgCheck.toLocaleString('ru-RU') + ' ₽' : '—'}
-            </div>
-            {planAvgCheck > 0 ? (
-              <div className="text-xs text-muted-foreground mt-1">
-                план {planAvgCheck.toLocaleString('ru-RU')} ₽
-                {avgCheckPct !== null && (
-                  <span className={`ml-1.5 font-medium ${avgCheckPct >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {avgCheckPct}%
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground mt-1">план не задан</div>
-            )}
-          </div>
         </div>
 
-        {/* Right column: funnel visualization */}
-        <div className="stat-card flex flex-col justify-center">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Воронка привлечения</div>
-          <div className="flex flex-col gap-2">
-            {funnelSteps.map((step) => (
-              <button
-                key={step.key}
-                onClick={() => setActiveDetailKey(step.key)}
-                className={`mx-auto border rounded-xl px-4 py-3 hover:opacity-80 transition-opacity cursor-pointer flex items-center justify-between ${step.color}`}
-                style={{ width: step.width }}
-              >
-                <div>
-                  <div className={`text-2xl font-bold ${step.textColor}`}>{step.value}</div>
-                  <div className={`text-xs font-medium ${step.textColor} opacity-80`}>{step.label}</div>
-                </div>
-                {step.conv !== null && (
-                  <div className={`text-sm font-semibold ${step.textColor} opacity-70`}>
-                    {step.conv}% →
+        {/* Right: funnel */}
+        <div className="bg-white border border-border rounded-xl p-3 flex flex-col gap-1.5">
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Воронка привлечения</div>
+          {funnelSteps.map((step, idx) => {
+            const planPct = step.plan > 0 ? Math.min(100, Math.round((step.value / step.plan) * 100)) : null;
+            return (
+              <div key={step.key} className="flex flex-col items-center">
+                <button
+                  onClick={() => setActiveDetailKey(step.key)}
+                  className={`w-full border rounded-lg px-2.5 py-1.5 hover:opacity-80 transition-opacity cursor-pointer ${step.color}`}
+                  style={{ marginLeft: `${idx * 8}%`, marginRight: `${idx * 8}%`, width: `${100 - idx * 16}%` }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className={`text-lg font-bold leading-none ${step.textColor}`}>{step.value}</span>
+                      <span className={`text-[10px] font-medium ml-1.5 ${step.textColor} opacity-70`}>{step.label}</span>
+                    </div>
+                    <div className="text-right">
+                      {planPct !== null && (
+                        <span className={`text-[10px] font-semibold block ${planPct >= 100 ? 'text-emerald-600' : planPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                          план {planPct}%
+                        </span>
+                      )}
+                      {step.plan > 0 && (
+                        <span className={`text-[10px] ${step.textColor} opacity-50`}>из {step.plan}</span>
+                      )}
+                    </div>
+                  </div>
+                  {step.plan > 0 && (
+                    <div className="mt-1 h-0.5 bg-white/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${step.barColor} opacity-60`}
+                        style={{ width: `${planPct ?? 0}%` }} />
+                    </div>
+                  )}
+                </button>
+                {/* Conversion arrow between stages */}
+                {step.convNext !== null && (
+                  <div className="flex items-center gap-1 py-0.5">
+                    <Icon name="ArrowDown" size={10} className="text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      {step.convNext}% {step.convLabel}
+                    </span>
                   </div>
                 )}
-              </button>
-            ))}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
