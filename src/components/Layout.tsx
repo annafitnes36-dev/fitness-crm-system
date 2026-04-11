@@ -20,7 +20,6 @@ const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard', permKey: 'menuDashboard' as keyof Permission },
   { id: 'clients', label: 'Клиенты', icon: 'Users', permKey: 'menuClients' as keyof Permission },
   { id: 'schedule', label: 'Расписание', icon: 'Calendar', permKey: 'menuSchedule' as keyof Permission },
-  { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard', permKey: 'menuSubscriptions' as keyof Permission },
   { id: 'finance', label: 'Операции', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
   { id: 'cash', label: 'Касса', icon: 'Landmark', permKey: 'menuCash' as keyof Permission },
   { id: 'notifications', label: 'Уведомления', icon: 'Bell', permKey: 'menuDashboard' as keyof Permission },

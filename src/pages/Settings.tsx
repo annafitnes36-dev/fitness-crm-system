@@ -407,23 +407,32 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
 
   type ManualValues = Record<string, Partial<Record<keyof MonthlyPlanRow, string>>>;
   const [manual, setManual] = useState<ManualValues>({});
+  // overrides — ручные значения для авто-вычисляемых ячеек (пустая строка = не задано, используется авто)
+  const [overrides, setOverrides] = useState<ManualValues>({});
 
   useEffect(() => {
-    const init: ManualValues = {};
+    const initManual: ManualValues = {};
+    const initOverrides: ManualValues = {};
     months.forEach(month => {
       const saved = state.monthlyPlans.find(p => p.branchId === selectedBranchId && p.month === month);
-      const row: Partial<Record<keyof MonthlyPlanRow, string>> = {};
+      const manRow: Partial<Record<keyof MonthlyPlanRow, string>> = {};
       PLAN_MANUAL_KEYS.forEach(key => {
         const v = saved?.plan?.[key];
-        row[key] = v !== undefined ? String(v) : '';
+        manRow[key] = v !== undefined ? String(v) : '';
       });
-      init[month] = row;
+      initManual[month] = manRow;
+      initOverrides[month] = {};
     });
-    setManual(init);
+    setManual(initManual);
+    setOverrides(initOverrides);
   }, [selectedYear, selectedBranchId, state.monthlyPlans]);
 
   const handleChange = (month: string, key: keyof MonthlyPlanRow, val: string) => {
     setManual(prev => ({ ...prev, [month]: { ...prev[month], [key]: val } }));
+  };
+
+  const handleOverrideChange = (month: string, key: keyof MonthlyPlanRow, val: string) => {
+    setOverrides(prev => ({ ...prev, [month]: { ...prev[month], [key]: val } }));
   };
 
   // ── Источники данных ───────────────────────────────────────────────
@@ -494,9 +503,19 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
     months.forEach(month => {
       const computed = compute(month);
       const plan: Partial<MonthlyPlanRow> = { ...computed };
+      // Ручные поля
       PLAN_MANUAL_KEYS.forEach(key => {
         const v = manual[month]?.[key];
         (plan as Record<string, number>)[key] = v !== undefined && v !== '' ? parseFloat(v) || 0 : 0;
+      });
+      // Авто-поля: если пользователь ввёл override — используем его, иначе вычисленное
+      PLANNING_ROWS.forEach(({ key }) => {
+        if (!PLAN_MANUAL_KEYS.has(key)) {
+          const ov = overrides[month]?.[key];
+          if (ov !== undefined && ov !== '') {
+            (plan as Record<string, number>)[key] = parseFloat(ov) || 0;
+          }
+        }
       });
       setMonthlyPlan(selectedBranchId, month, plan);
     });
@@ -530,14 +549,14 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+      <div className="flex items-center gap-4 px-3 py-2 bg-secondary border border-border rounded-lg text-xs">
         <span className="flex items-center gap-2 font-medium text-amber-800">
           <span className="inline-block w-4 h-4 rounded bg-amber-200 border-2 border-amber-400" />
-          Ячейки с оранжевой рамкой — вводятся вручную
+          Оранжевые — обязательно вводятся вручную
         </span>
         <span className="flex items-center gap-2 text-muted-foreground">
           <span className="inline-block w-4 h-4 rounded bg-white border border-border" />
-          Белые — рассчитываются автоматически
+          Белые — считаются автоматически, но можно переопределить вручную
         </span>
       </div>
 
@@ -573,9 +592,9 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                     const isManual = PLAN_MANUAL_KEYS.has(row.key);
                     const vals = compute(month);
                     const computedVal = vals[row.key] ?? 0;
-                    const manualVal = manual[month]?.[row.key] ?? '';
 
                     if (isManual) {
+                      const manualVal = manual[month]?.[row.key] ?? '';
                       return (
                         <td key={row.key} className="px-1.5 py-1 border-l border-amber-200 bg-amber-50/40">
                           <input
@@ -590,9 +609,26 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                       );
                     }
 
+                    // Авто-ячейка: редактируемая, placeholder = вычисленное значение
+                    const ovVal = overrides[month]?.[row.key] ?? '';
+                    const placeholderText = computedVal !== 0
+                      ? (row.isPercent ? `${computedVal}%` : row.isCurrency ? computedVal.toLocaleString() : String(computedVal))
+                      : '—';
                     return (
-                      <td key={row.key} className="px-2 py-2 text-center border-l border-border/20 font-medium tabular-nums">
-                        {fmt(row, computedVal)}
+                      <td key={row.key} className="px-1.5 py-1 border-l border-border/20">
+                        <input
+                          type="number"
+                          min={0}
+                          className={`w-full rounded text-center text-xs py-1 focus:outline-none transition-colors ${
+                            ovVal !== ''
+                              ? 'bg-white border border-blue-300 font-medium text-blue-900 focus:border-blue-400'
+                              : 'bg-transparent border border-transparent font-medium text-foreground hover:border-border/60 focus:border-border focus:bg-white'
+                          }`}
+                          value={ovVal}
+                          onChange={e => handleOverrideChange(month, row.key, e.target.value)}
+                          placeholder={placeholderText}
+                          title={ovVal !== '' ? 'Переопределено вручную (авто: ' + placeholderText + ')' : 'Авто: ' + placeholderText}
+                        />
                       </td>
                     );
                   })}
@@ -616,7 +652,10 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
                       </td>
                     );
                   }
-                  const vals = months.map(m => compute(m)[row.key] ?? 0).filter(v => v > 0);
+                  const vals = months.map(m => {
+                    const ov = overrides[m]?.[row.key];
+                    return ov !== undefined && ov !== '' ? parseFloat(ov) || 0 : compute(m)[row.key] ?? 0;
+                  }).filter(v => v > 0);
                   const total = row.isPercent || row.key === 'avgCheck'
                     ? (vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0)
                     : vals.reduce((a, b) => a + b, 0);
@@ -631,7 +670,7 @@ function PlanningTab({ state, setMonthlyPlan }: PlanningTabProps) {
           </table>
         </div>
         <div className="px-4 py-3 border-t border-border flex justify-between items-center bg-secondary/20">
-          <span className="text-xs text-muted-foreground">Ячейки с оранжевой рамкой вводятся вручную — остальные считаются из плана продаж и плана расходов</span>
+          <span className="text-xs text-muted-foreground">Оранжевые ячейки — ручной ввод. Белые считаются автоматически, но можно кликнуть и ввести своё значение (подсветится синим)</span>
           <Button onClick={handleSaveAll} size="sm" className="bg-foreground text-primary-foreground hover:opacity-90">
             <Icon name="Save" size={13} className="mr-1" />
             Сохранить
