@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { AppStore } from '@/store';
+import type { StoreType as AppStore } from '@/store';
 import Icon from '@/components/ui/icon';
 
 interface MarketingProps {
@@ -45,43 +45,91 @@ export default function Marketing({ store }: MarketingProps) {
   );
 
   // --- МЕТРИКА 1: Средняя стоимость тренировки ---
+  // Считаем раздельно по лимитным и безлимитным абонементам
   const avgTrainingCost = useMemo(() => {
-    // Берём абонементы активные/истёкшие в выбранном месяце
-    const monthSubs = state.subscriptions.filter(sub =>
+    // Берём все активные абонементы на текущий момент
+    const activeSubs = state.subscriptions.filter(sub =>
       targetBranches.includes(sub.branchId) &&
-      sub.status !== 'returned' &&
-      sub.purchaseDate >= monthFrom && sub.purchaseDate <= monthTo
+      sub.status === 'active'
     );
 
-    if (monthSubs.length === 0) return null;
+    if (activeSubs.length === 0) return null;
 
-    // Для каждого абонемента: сколько посещений было за этот месяц по этому абонементу
-    let totalVisits = 0;
-    let totalCost = 0;
-
-    monthSubs.forEach(sub => {
-      const sale = state.sales.find(s => s.clientId === sub.clientId && s.type === 'subscription' && s.date === sub.purchaseDate && targetBranches.includes(s.branchId));
-      const price = sale ? sale.finalPrice : sub.price * (1 - (state.sales.find(s => s.clientId === sub.clientId && s.type === 'subscription' && s.date === sub.purchaseDate)?.discount || 0) / 100);
-
-      const visitsThisSub = state.visits.filter(v =>
-        v.subscriptionId === sub.id &&
-        v.status === 'attended' &&
-        v.date >= monthFrom && v.date <= monthTo
-      ).length;
-
-      totalVisits += visitsThisSub;
-      totalCost += price;
+    // Лимитные абонементы: sessionsLimit — число
+    // Стоимость одной тренировки = цена абонемента / количество тренировок в абонементе
+    const limitedSubs = activeSubs.filter(sub => {
+      const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+      return plan && typeof plan.sessionsLimit === 'number' && plan.sessionsLimit > 0;
     });
 
-    const avgVisitsPerSub = monthSubs.length > 0 ? totalVisits / monthSubs.length : 0;
-    const avgCostPerSub = monthSubs.length > 0 ? totalCost / monthSubs.length : 0;
-    const avgPerTraining = avgVisitsPerSub > 0 ? avgCostPerSub / avgVisitsPerSub : null;
+    let limitedCostPerTraining: number | null = null;
+    if (limitedSubs.length > 0) {
+      const costs: number[] = [];
+      limitedSubs.forEach(sub => {
+        const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+        if (!plan || typeof plan.sessionsLimit !== 'number' || plan.sessionsLimit <= 0) return;
+        const sale = state.sales.find(s => s.clientId === sub.clientId && s.type === 'subscription' && s.date === sub.purchaseDate);
+        const price = sale ? sale.finalPrice : sub.price;
+        costs.push(price / plan.sessionsLimit);
+      });
+      if (costs.length > 0) limitedCostPerTraining = Math.round(costs.reduce((a, b) => a + b, 0) / costs.length);
+    }
+
+    // Безлимитные абонементы: sessionsLimit === 'unlimited'
+    // 1. Цена абонемента / количество месяцев = стоимость 1 месяца
+    // 2. Стоимость месяца / фактические посещения (attended) = стоимость 1 тренировки
+    const unlimitedSubs = activeSubs.filter(sub => {
+      const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+      return plan && plan.sessionsLimit === 'unlimited';
+    });
+
+    let unlimitedCostPerTraining: number | null = null;
+    if (unlimitedSubs.length > 0) {
+      const costs: number[] = [];
+      unlimitedSubs.forEach(sub => {
+        const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+        if (!plan || plan.sessionsLimit !== 'unlimited') return;
+        const sale = state.sales.find(s => s.clientId === sub.clientId && s.type === 'subscription' && s.date === sub.purchaseDate);
+        const price = sale ? sale.finalPrice : sub.price;
+        // Количество месяцев = durationDays / 30
+        const months = Math.max(1, plan.durationDays / 30);
+        const pricePerMonth = price / months;
+        // Фактические посещения по этому абонементу
+        const actualVisits = state.visits.filter(v =>
+          v.subscriptionId === sub.id && v.status === 'attended'
+        ).length;
+        if (actualVisits > 0) {
+          costs.push(pricePerMonth / actualVisits);
+        }
+      });
+      if (costs.length > 0) unlimitedCostPerTraining = Math.round(costs.reduce((a, b) => a + b, 0) / costs.length);
+    }
+
+    // Общая средняя: по всем активным абонементам (лимитные через sessionsLimit, безлимитные через факт)
+    const allCosts: number[] = [];
+    activeSubs.forEach(sub => {
+      const plan = state.subscriptionPlans.find(p => p.id === sub.planId);
+      if (!plan) return;
+      const sale = state.sales.find(s => s.clientId === sub.clientId && s.type === 'subscription' && s.date === sub.purchaseDate);
+      const price = sale ? sale.finalPrice : sub.price;
+      if (typeof plan.sessionsLimit === 'number' && plan.sessionsLimit > 0) {
+        allCosts.push(price / plan.sessionsLimit);
+      } else if (plan.sessionsLimit === 'unlimited') {
+        const months = Math.max(1, plan.durationDays / 30);
+        const pricePerMonth = price / months;
+        const actualVisits = state.visits.filter(v => v.subscriptionId === sub.id && v.status === 'attended').length;
+        if (actualVisits > 0) allCosts.push(pricePerMonth / actualVisits);
+      }
+    });
+    const avgTotal = allCosts.length > 0 ? Math.round(allCosts.reduce((a, b) => a + b, 0) / allCosts.length) : null;
 
     return {
-      avgVisits: Math.round(avgVisitsPerSub * 10) / 10,
-      avgSubCost: Math.round(avgCostPerSub),
-      avgPerTraining: avgPerTraining ? Math.round(avgPerTraining) : null,
-      subsCount: monthSubs.length,
+      limitedCount: limitedSubs.length,
+      limitedCostPerTraining,
+      unlimitedCount: unlimitedSubs.length,
+      unlimitedCostPerTraining,
+      avgTotal,
+      totalCount: activeSubs.length,
     };
   }, [state, selectedMonth, selectedBranchId]);
 
@@ -311,16 +359,28 @@ export default function Marketing({ store }: MarketingProps) {
             Средняя стоимость тренировки
           </div>
           {avgTrainingCost ? (
-            <div className="space-y-2">
-              <div className="text-2xl font-bold">
-                {avgTrainingCost.avgPerTraining !== null
-                  ? `${avgTrainingCost.avgPerTraining.toLocaleString()} ₽`
-                  : '—'}
+            <div className="space-y-3">
+              <div>
+                <div className="text-2xl font-bold">
+                  {avgTrainingCost.avgTotal !== null ? `${avgTrainingCost.avgTotal.toLocaleString()} ₽` : '—'}
+                </div>
+                <div className="text-xs text-muted-foreground">Общая средняя · {avgTrainingCost.totalCount} активных абонементов</div>
               </div>
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                <div>Средняя цена абонемента: <span className="font-medium text-foreground">{avgTrainingCost.avgSubCost.toLocaleString()} ₽</span></div>
-                <div>Посещений в среднем: <span className="font-medium text-foreground">{avgTrainingCost.avgVisits}</span></div>
-                <div className="text-[11px]">По {avgTrainingCost.subsCount} абонементам за месяц</div>
+              <div className="border-t border-border pt-2 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Лимитные ({avgTrainingCost.limitedCount} абон.)</span>
+                  <span className="text-sm font-semibold">
+                    {avgTrainingCost.limitedCostPerTraining !== null ? `${avgTrainingCost.limitedCostPerTraining.toLocaleString()} ₽` : '—'}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground -mt-1">цена ÷ кол-во тренировок в абонементе</div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Безлимитные ({avgTrainingCost.unlimitedCount} абон.)</span>
+                  <span className="text-sm font-semibold">
+                    {avgTrainingCost.unlimitedCostPerTraining !== null ? `${avgTrainingCost.unlimitedCostPerTraining.toLocaleString()} ₽` : '—'}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground -mt-1">цена за месяц ÷ факт. посещений</div>
               </div>
             </div>
           ) : (

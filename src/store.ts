@@ -2457,7 +2457,7 @@ const CRM_STATE_URL = (window as unknown as Record<string, string>)['__CRM_STATE
 const PATCH_KEYS: (keyof AppState)[] = [
   'sales', 'subscriptions', 'schedule', 'visits', 'clients',
   'expenses', 'cashOperations', 'shifts', 'bonusTransactions',
-  'staff', 'currentBranchId', 'currentStaffId',
+  'staff',
   'subscriptionPlans', 'singleVisitPlans', 'trainingTypes',
   'trainingCategories', 'trainers', 'halls', 'branches',
   'inquiries', 'dismissedNotifications', 'failedNotifications',
@@ -2635,9 +2635,12 @@ export function useStore() {
       });
       const dbStaffIds = new Set(mergedStaff.map((s: StaffMember) => s.id));
       const extraStaff = localStaff.filter(s => !dbStaffIds.has(s.id));
+      // currentBranchId и currentStaffId — клиентские, берём из локального state (не из DB)
       let merged: AppState = {
         ...dbState,
         staff: extraStaff.length > 0 ? [...mergedStaff, ...extraStaff] : mergedStaff,
+        currentBranchId: localState.currentBranchId,
+        currentStaffId: localState.currentStaffId,
       };
       if (!merged.importedBorV1) { merged = applyBorImport(merged); merged.importedBorV1 = true; }
       // Инициализируем локальный список скрытых из БД — он станет единственным источником правды
@@ -2692,20 +2695,28 @@ export function useStore() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [dbLoaded]);
 
-  // Периодическое обновление данных с сервера (polling каждые 5 сек)
+  // Периодическое обновление данных с сервера (polling каждые 1 сек, с backoff при ошибках)
   useEffect(() => {
     if (!dbLoaded) return;
     if (!CRM_STATE_URL) return;
+    let skipTicksLeft = 0;
     const interval = setInterval(async () => {
       if (_saving) return;
+      // При ошибках — пропускаем тики (backoff)
+      if (skipTicksLeft > 0) { skipTicksLeft--; return; }
       const dbState = await loadStateFromDb();
-      if (!dbState || !Array.isArray(dbState.staff) || dbState.staff.length === 0) return;
+      if (!dbState || !Array.isArray(dbState.staff) || dbState.staff.length === 0) {
+        skipTicksLeft = Math.min(skipTicksLeft + 4, 29); // до 30 сек паузы при ошибках
+        return;
+      }
+      skipTicksLeft = 0;
       setState(cur => {
+        // Локальные данные ВСЕГДА приоритетнее DB — они могут ещё не успеть сохраниться
+        // DB добавляет только записи которых нет локально (добавленные с другого устройства)
         const mergeByIdUpdating = <T extends { id: string }>(dbItems: T[], curItems: T[]): T[] => {
-          // БД — источник правды. Локальные записи добавляем только если их нет в БД (ещё не сохранились)
-          const dbMap = new Map(dbItems.map(i => [i.id, i]));
-          const result: T[] = [...dbItems];
-          curItems.forEach(ci => { if (!dbMap.has(ci.id)) result.push(ci); });
+          const localMap = new Map(curItems.map(i => [i.id, i]));
+          const result: T[] = [...curItems]; // локальные данные — основа
+          dbItems.forEach(di => { if (!localMap.has(di.id)) result.push(di); }); // добавляем только новые из DB
           return result;
         };
         const localStaffMap = new Map(cur.staff.map(s => [s.id, s]));
@@ -2761,7 +2772,7 @@ export function useStore() {
           currentBranchId: cur.currentBranchId,
         };
       });
-    }, 5000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [dbLoaded]);
 
@@ -2876,10 +2887,17 @@ export function useStore() {
     const plan = state.subscriptionPlans.find(p => p.id === planId);
     if (!plan) return;
     const saleDate = opts?.saleDate ?? fmt(new Date());
-    const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription' && s.branchId === state.currentBranchId);
+    const prevSubs = state.sales.filter(s => s.clientId === clientId && s.type === 'subscription' && s.branchId === state.currentBranchId && !s.isRefund);
     const hadSub = prevSubs.length > 0;
-    const lastSale = prevSubs.sort((a, b) => b.date.localeCompare(a.date))[0];
-    const isReturn = hadSub && lastSale ? (new Date(saleDate).getTime() - new Date(lastSale.date).getTime()) > 60 * 24 * 60 * 60 * 1000 : false;
+    // Для определения возвращения: смотрим дату окончания последнего абонемента клиента
+    // Возвращение = с момента окончания последнего абонемента прошло более 2 месяцев (62 дня)
+    const prevSubscriptions = state.subscriptions.filter(sub => sub.clientId === clientId && sub.branchId === state.currentBranchId);
+    const lastSub = prevSubscriptions.sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''))[0];
+    const lastSubEndDate = lastSub?.endDate;
+    const TWO_MONTHS_MS = 62 * 24 * 60 * 60 * 1000;
+    const isReturn = hadSub && lastSubEndDate
+      ? (new Date(saleDate).getTime() - new Date(lastSubEndDate).getTime()) > TWO_MONTHS_MS
+      : false;
     const isRenewal = hadSub && !isReturn;
     const isFirst = !hadSub;
     const finalPrice = Math.round(plan.price * (1 - discount / 100));

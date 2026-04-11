@@ -412,6 +412,46 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
     return hiddenIds.has(`${row.cardKey}:${row.id}`);
   };
 
+  // Funnel steps definition
+  const funnelSteps = [
+    {
+      key: 'inquiries' as DetailKey,
+      label: 'Обращений',
+      value: totalInquiries,
+      color: 'bg-violet-100 border-violet-300',
+      textColor: 'text-violet-700',
+      width: '100%',
+      conv: convInquiryToEnroll,
+    },
+    {
+      key: 'firstEnrollments' as DetailKey,
+      label: 'Записей на пробную',
+      value: firstEnrollmentsCount,
+      color: 'bg-indigo-100 border-indigo-300',
+      textColor: 'text-indigo-700',
+      width: '85%',
+      conv: convEnrollToAttend,
+    },
+    {
+      key: 'attendedNewbies' as DetailKey,
+      label: 'Дошло новичков',
+      value: attendedNewbiesCount,
+      color: 'bg-blue-100 border-blue-300',
+      textColor: 'text-blue-700',
+      width: '70%',
+      conv: convAttendToBuy,
+    },
+    {
+      key: 'firstTimeSubs' as DetailKey,
+      label: 'Купили (новички)',
+      value: firstTimeSubs,
+      color: 'bg-emerald-100 border-emerald-300',
+      textColor: 'text-emerald-700',
+      width: '55%',
+      conv: null,
+    },
+  ];
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Period selector */}
@@ -448,122 +488,127 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
         )}
       </div>
 
-      {/* Key stats — Row 1: 6 cards */}
-      <div className="grid grid-cols-6 gap-4">
-        {[
-          { label: 'Обращений', value: totalInquiries, sub: `вх. ${monthInquiries} + рег. ${newClientsMonth}`, icon: 'PhoneIncoming', color: 'text-violet-600', conv: convInquiryToEnroll !== null ? `→ запись ${convInquiryToEnroll}%` : null, detailKey: 'inquiries' as DetailKey },
-          { label: 'Записей на пробную', value: firstEnrollmentsCount, sub: 'первая тренировка в истории', icon: 'CalendarCheck', color: 'text-indigo-500', conv: convEnrollToAttend !== null ? `→ дошло ${convEnrollToAttend}%` : null, detailKey: 'firstEnrollments' as DetailKey },
-          { label: 'Дошло новичков', value: attendedNewbiesCount, sub: 'первый визит отмечен "пришёл"', icon: 'UserRound', color: 'text-blue-500', conv: convAttendToBuy !== null ? `→ купило ${convAttendToBuy}%` : null, detailKey: 'attendedNewbies' as DetailKey },
-          { label: 'Купили (новички)', value: firstTimeSubs, sub: 'первая покупка абонемента', icon: 'UserPlus', color: 'text-emerald-600', conv: null, detailKey: 'firstTimeSubs' as DetailKey },
-          { label: 'Продаж всего', value: totalSubs, sub: `продл. ${renewalSubSalesCount} · возвр. ${returnSubSalesCount}`, icon: 'CreditCard', color: 'text-foreground', conv: null, detailKey: 'totalSubs' as DetailKey },
-        ].map((s, i) => (
-          <button key={i} className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer" onClick={() => setActiveDetailKey(s.detailKey)}>
-            <div className="flex items-start justify-between mb-3">
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">{s.label}</span>
-              <Icon name={s.icon} size={16} className={s.color} />
+      {/* Main stats: left column (35%) + right column funnel (65%) */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: '35% 1fr' }}>
+        {/* Left column: compact stat cards */}
+        <div className="space-y-3">
+          {/* Total sales */}
+          <button
+            onClick={() => setActiveDetailKey('totalSubs')}
+            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
+          >
+            <div className="flex justify-between items-start mb-1">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Продаж всего</span>
+              <Icon name="CreditCard" size={14} className="text-foreground" />
             </div>
-            <div className="text-2xl font-semibold">{s.value}</div>
-            <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>
-            {s.conv && <div className="text-[10px] text-muted-foreground/70 mt-0.5 font-medium">{s.conv}</div>}
-          </button>
-        ))}
-        {/* Average check */}
-        <div className="stat-card">
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">Средний чек</span>
-            <Icon name="Banknote" size={16} className="text-amber-500" />
-          </div>
-          <div className="text-2xl font-semibold">{factAvgCheck > 0 ? factAvgCheck.toLocaleString('ru-RU') + ' ₽' : '—'}</div>
-          {planAvgCheck > 0 ? (
+            <div className="text-3xl font-bold">{totalSubs}</div>
+            {totalPct !== null && (
+              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${totalPct >= 100 ? 'bg-emerald-500' : totalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, totalPct)}%` }}
+                />
+              </div>
+            )}
             <div className="text-xs text-muted-foreground mt-1">
-              план {planAvgCheck.toLocaleString('ru-RU')} ₽
-              {avgCheckPct !== null && (
-                <span className={`ml-1.5 font-medium ${avgCheckPct >= 100 ? 'text-green-600' : 'text-red-500'}`}>
-                  {avgCheckPct}%
-                </span>
-              )}
+              {totalTarget > 0 ? `план ${totalTarget} · ${totalPct ?? 0}%` : 'план не задан'}
             </div>
-          ) : (
-            <div className="text-xs text-muted-foreground mt-1">план не задан</div>
-          )}
+          </button>
+
+          {/* Renewals */}
+          <button
+            onClick={() => setActiveDetailKey('renewals')}
+            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
+          >
+            <div className="flex justify-between items-start mb-1">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Продления</span>
+              <Icon name="RefreshCw" size={14} className="text-sky-500" />
+            </div>
+            <div className="text-3xl font-bold">{renewalSubSalesCount}</div>
+            {renewalPct !== null && (
+              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${renewalPct >= 100 ? 'bg-emerald-500' : renewalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, renewalPct)}%` }}
+                />
+              </div>
+            )}
+            <div className="text-xs text-muted-foreground mt-1">
+              {renewalTarget > 0 ? `план ${renewalTarget} · ${renewalPct ?? 0}%` : 'план не задан'}
+            </div>
+          </button>
+
+          {/* Returns */}
+          <button
+            onClick={() => setActiveDetailKey('returns')}
+            className="stat-card w-full text-left hover:ring-2 hover:ring-border transition-all"
+          >
+            <div className="flex justify-between items-start mb-1">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Возвращения</span>
+              <Icon name="UserCheck" size={14} className="text-teal-500" />
+            </div>
+            <div className="text-3xl font-bold">{returnSubSalesCount}</div>
+            {returnPct !== null && (
+              <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${returnPct >= 100 ? 'bg-emerald-500' : returnPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${Math.min(100, returnPct)}%` }}
+                />
+              </div>
+            )}
+            <div className="text-xs text-muted-foreground mt-1">
+              {returnTarget > 0 ? `план ${returnTarget} · ${returnPct ?? 0}%` : 'план не задан'}
+            </div>
+          </button>
+
+          {/* Average check */}
+          <div className="stat-card">
+            <div className="flex justify-between items-start mb-1">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Средний чек</span>
+              <Icon name="Banknote" size={14} className="text-amber-500" />
+            </div>
+            <div className="text-3xl font-bold">
+              {factAvgCheck > 0 ? factAvgCheck.toLocaleString('ru-RU') + ' ₽' : '—'}
+            </div>
+            {planAvgCheck > 0 ? (
+              <div className="text-xs text-muted-foreground mt-1">
+                план {planAvgCheck.toLocaleString('ru-RU')} ₽
+                {avgCheckPct !== null && (
+                  <span className={`ml-1.5 font-medium ${avgCheckPct >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {avgCheckPct}%
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground mt-1">план не задан</div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Row 2: Renewals + Returns wide cards */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Renewals card */}
-        <button
-          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
-          onClick={() => setActiveDetailKey('renewals')}
-        >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">Продления</span>
-            <Icon name="RefreshCw" size={16} className="text-sky-500" />
-          </div>
-          <div className="flex items-end gap-3">
-            <div className="text-2xl font-semibold">{renewalSubSalesCount}</div>
-            {renewalTarget > 0 && (
-              <div className="text-xs text-muted-foreground mb-0.5">из {renewalTarget}</div>
-            )}
-          </div>
-          {renewalTarget > 0 ? (
-            <div className="mt-2">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${renewalPct !== null && renewalPct >= 100 ? 'bg-emerald-500' : renewalPct !== null && renewalPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                    style={{ width: `${Math.min(100, renewalPct ?? 0)}%` }}
-                  />
+        {/* Right column: funnel visualization */}
+        <div className="stat-card flex flex-col justify-center">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4">Воронка привлечения</div>
+          <div className="flex flex-col gap-2">
+            {funnelSteps.map((step) => (
+              <button
+                key={step.key}
+                onClick={() => setActiveDetailKey(step.key)}
+                className={`mx-auto border rounded-xl px-4 py-3 hover:opacity-80 transition-opacity cursor-pointer flex items-center justify-between ${step.color}`}
+                style={{ width: step.width }}
+              >
+                <div>
+                  <div className={`text-2xl font-bold ${step.textColor}`}>{step.value}</div>
+                  <div className={`text-xs font-medium ${step.textColor} opacity-80`}>{step.label}</div>
                 </div>
-                {renewalPct !== null && (
-                  <span className={`text-xs font-medium ${renewalPct >= 100 ? 'text-emerald-600' : renewalPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                    {renewalPct}%
-                  </span>
+                {step.conv !== null && (
+                  <div className={`text-sm font-semibold ${step.textColor} opacity-70`}>
+                    {step.conv}% →
+                  </div>
                 )}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">план {renewalTarget}</div>
-            </div>
-          ) : (
-            <div className="text-xs text-muted-foreground mt-1">план не задан</div>
-          )}
-        </button>
-
-        {/* Returns card */}
-        <button
-          className="stat-card text-left w-full hover:ring-2 hover:ring-border transition-all cursor-pointer"
-          onClick={() => setActiveDetailKey('returns')}
-        >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">Возвращения</span>
-            <Icon name="UserCheck" size={16} className="text-teal-500" />
+              </button>
+            ))}
           </div>
-          <div className="flex items-end gap-3">
-            <div className="text-2xl font-semibold">{returnSubSalesCount}</div>
-            {returnTarget > 0 && (
-              <div className="text-xs text-muted-foreground mb-0.5">из {returnTarget}</div>
-            )}
-          </div>
-          {returnTarget > 0 ? (
-            <div className="mt-2">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${returnPct !== null && returnPct >= 100 ? 'bg-emerald-500' : returnPct !== null && returnPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                    style={{ width: `${Math.min(100, returnPct ?? 0)}%` }}
-                  />
-                </div>
-                {returnPct !== null && (
-                  <span className={`text-xs font-medium ${returnPct >= 100 ? 'text-emerald-600' : returnPct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-                    {returnPct}%
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">план {returnTarget}</div>
-            </div>
-          ) : (
-            <div className="text-xs text-muted-foreground mt-1">план не задан</div>
-          )}
-        </button>
+        </div>
       </div>
 
       {/* Sales plan table */}
@@ -759,7 +804,16 @@ export default function Dashboard({ store, onSell, onNavigate }: DashboardProps)
                         <MoveOverrideButton
                           saleId={row.saleId}
                           currentOverride={(state.saleOverrides || {})[row.saleId] ?? null}
-                          onSetOverride={(cat) => setSaleOverride(row.saleId!, cat)}
+                          onSetOverride={(cat) => {
+                            setSaleOverride(row.saleId!, cat);
+                            if (cat !== null) {
+                              // Hide from firstTimeSubs card when moved to another category
+                              hideDashboardItem('firstTimeSubs', row.saleId!);
+                            } else {
+                              // Restore to firstTimeSubs when reset
+                              restoreDashboardItem('firstTimeSubs', row.saleId!);
+                            }
+                          }}
                         />
                       )}
                       {(canDelete && row.deleteType || canDeleteInquiriesOnly && row.deleteType === 'inquiry') && (
