@@ -15,15 +15,13 @@ interface LayoutProps {
 }
 
 const ALL_NAV_ITEMS = [
-  { id: 'director-dashboard', label: 'Аналитика', icon: 'TrendingUp', permKey: 'menuAnalytics' as keyof Permission },
   { id: 'reports', label: 'Отчёты', icon: 'FileBarChart2', permKey: 'menuReports' as keyof Permission },
   { id: 'marketing', label: 'Маркетинг', icon: 'Megaphone', permKey: 'menuMarketing' as keyof Permission },
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard', permKey: 'menuDashboard' as keyof Permission },
   { id: 'clients', label: 'Клиенты', icon: 'Users', permKey: 'menuClients' as keyof Permission },
   { id: 'schedule', label: 'Расписание', icon: 'Calendar', permKey: 'menuSchedule' as keyof Permission },
   { id: 'subscriptions', label: 'Абонементы', icon: 'CreditCard', permKey: 'menuSubscriptions' as keyof Permission },
-  { id: 'sales', label: 'Продажи', icon: 'ShoppingBag', permKey: 'menuSales' as keyof Permission },
-  { id: 'finance', label: 'Финансы', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
+  { id: 'finance', label: 'Операции', icon: 'BarChart3', permKey: 'menuFinance' as keyof Permission },
   { id: 'cash', label: 'Касса', icon: 'Landmark', permKey: 'menuCash' as keyof Permission },
   { id: 'notifications', label: 'Уведомления', icon: 'Bell', permKey: 'menuDashboard' as keyof Permission },
   { id: 'branches', label: 'Филиалы', icon: 'Building2', permKey: 'menuBranches' as keyof Permission },
@@ -32,7 +30,7 @@ const ALL_NAV_ITEMS = [
 ];
 
 // Bottom nav — самые частые действия
-const BOTTOM_NAV_KEYS = ['dashboard', 'clients', 'schedule', 'notifications', 'sales'];
+const BOTTOM_NAV_KEYS = ['dashboard', 'clients', 'schedule', 'notifications', 'finance'];
 
 function countNotifications(store: StoreType): number {
   const { state } = store;
